@@ -1,5 +1,5 @@
-#ifndef _DATA_BASE_
-#define _DATA_BASE_
+#ifndef __DATABASE_H_
+#define __DATABASE_H_
 
 #include <stdio.h>   /* gets */
 #include <stdlib.h>  /* atoi, malloc */
@@ -7,19 +7,19 @@
 #include "uthash.h"
 #include "utlist.h"
 
-typedef struct file{
+struct file{
   int id;
   char* name;
   struct file *next, *prev;
 };
 
-typedef struct tag{
+struct tag{
   int id;
   char* name;
-  file* headFiles;
+  struct file* headFiles;
 };
 
-void initTag();
-void addTag(char* fileName, char* tagName);
+void db_initTag();
+void db_addTag(char* fileName, char* tagName);
 
 #endif

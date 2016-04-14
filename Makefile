@@ -5,8 +5,26 @@ PROGRAMS = tagfs
 
 all: $(PROGRAMS)
 
-%: %.c
-	gcc $(CPPFLAGS) $(CFLAGS) -Wall $< -o $@ -lfuse
+tagfs: tagfs.c dataFile.o dataBase.o
+	gcc $(CPPFLAGS) $(CFLAGS) -Wall $^ -o $@ -lfuse
+
+%: %.o
+	gcc $(CPPFLAGS) $(CFLAGS) -Wall -o $@ $^
 
 clean:
-	$(RM) $(PROGRAMS) *.log
+	$(RM) $(PROGRAMS) *.log *.o
+
+.PHONY:	 mount, unmount, kill, test
+
+mount: 
+	./$(PROGRAMS) ./tests_de_base/tests/images ./mnt
+
+unmount:
+	fusermount -u ./mnt
+
+kill:
+	kill -9 tagfs
+
+test: $(PROGRAMS)
+	cp ./$(PROGRAMS) ./tests_de_base/tests/$(PROGRAMS)
+	cd ./tests_de_base/tests/ && ./check_ls.sh

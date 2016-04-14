@@ -15,6 +15,8 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include "dataFile.h"
+#include "dataBase.h"
 
 static DIR *dir;
 static char *dirpath;
@@ -31,12 +33,17 @@ FILE *mylog;
  * File operations
  */
 
+
+/**
+ * Récupère le nom du fichier à partir du nom complet.
+ * Exemple : /foo/bar/toto -> toto
+ *
+ * \param path nom complet
+ * \return nom du fichier
+ */
 char *tag_realpath(const char *path)
 {
   char *realpath;
-  /* DONE remove directory names before the actual filename
-   * so that grepped file '/foo/bar/toto' becomes 'toto'
-   */
   /* prepend dirpath since the daemon runs in '/' */
   char * begin_file = strrchr(path,'/');
   asprintf(&realpath, "%s/%s", dirpath, begin_file ? ++begin_file : path);
@@ -57,9 +64,10 @@ static int tag_getattr(const char *path, struct stat *stbuf)
   /* if the file doesn't exist, assume it's a virtual grepped directory and stat the main directory instead */
   LOG("statDir : %s \n",realpath);
   res = stat(realpath, stbuf);
-  if (res == -1)
+  if (res == -1) {
+    LOG("statDir : %s \n",dirpath);
     res = stat(dirpath, stbuf);
-  
+  }
   LOG("getattr returning %s\n", strerror(-res));
   free(realpath);
   return res;
@@ -173,6 +181,8 @@ int main(int argc, char *argv[])
     fprintf(stderr, "couldn't open directory %s\n", dirpath);
     exit(EXIT_FAILURE);
   }
+
+  df_load(dirpath);
   argv++;
   argc--;
 
