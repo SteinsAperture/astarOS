@@ -30,7 +30,7 @@ int df_load(char *path){
         sscanf(line, "%s", t);
         LOG("tag : %s\n", t);
         if(f[0]!=0){
-          //db_addTag(f, t);
+          db_addTag(f, t);
         }else{
           
         }
@@ -38,5 +38,6 @@ int df_load(char *path){
       // Reste on ignore
    }
   }
+  test(0);
   return 0;
 }
