@@ -7,19 +7,28 @@
 #include "uthash.h"
 #include "utlist.h"
 
+#define TAGNAME_SIZE 128
+
 struct file{
-  int id;
   char* name;
   struct file *next, *prev;
 };
 
 struct tag{
-  int id;
-  char* name;
+  char name[TAGNAME_SIZE];
   struct file* headFiles;
+  UT_hash_handle hh;         /* makes this structure hashable */
 };
 
-void db_initTag();
+
+//add a tag in the hashtable
 void db_addTag(char* fileName, char* tagName);
+
+//return files by tag
+struct file* db_getFiles(char* tagName);
+
+
+void test(void);
+
 
 #endif

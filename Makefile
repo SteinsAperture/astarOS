@@ -17,7 +17,7 @@ clean:
 .PHONY:	 mount, unmount, kill, test
 
 mount: 
-	./$(PROGRAMS) ./tests_de_base/tests/images ./mnt
+	mkdir -p mnt && ./$(PROGRAMS) ./tests_de_base/tests/images ./mnt
 
 unmount:
 	fusermount -u ./mnt
