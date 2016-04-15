@@ -38,6 +38,5 @@ int df_load(char *path){
       // Reste on ignore
    }
   }
-  test(0);
   return 0;
 }
