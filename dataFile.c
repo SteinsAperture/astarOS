@@ -8,7 +8,7 @@ FILE *mylog;
 int df_load(char *path){
 
   mylog = fopen(LOGFILE, "a"); /* append logs to previous executions */
-  
+
   LOG("dirpath : %s \n", path);
   char file[MAX];
   strcpy(file, path);
@@ -16,22 +16,27 @@ int df_load(char *path){
   LOG("fileazr : %s \n", file);
   FILE* dataFile;
   char line[MAX], f[MAX], t[MAX];
+  f[0]=0;
   dataFile =  fopen(file, "r");
   if (dataFile == NULL) {
     perror("Fichier introuvable");
     exit(EXIT_FAILURE);
-  } else {
+  }else{
     while (fgets(line, MAX, dataFile) != NULL){
       if (*line == '[') { // file
-	sscanf(line, "[%[a-zA-Z.]]", f);
+        sscanf(line, "[%[a-zA-Z.]]", f);
         LOG("file : %s\n", f);
-      } else if (*line != '#' && *line != '\n') { // Un tag
-	sscanf(line, "%s", t);
-	LOG("tag : %s\n", t);
-	//db_addTag(f, t);
-      }
+      }else if (*line != '#' && *line != '\n') { // Un tag
+        sscanf(line, "%s", t);
+        LOG("tag : %s\n", t);
+        if(f[0]!=0){
+          //db_addTag(f, t);
+        }else{
+          
+        }
+     }
       // Reste on ignore
-    }
+   }
   }
   return 0;
 }
