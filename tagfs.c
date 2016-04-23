@@ -25,15 +25,13 @@ FILE *mylog;
  * TODO
  */
 
-struct request * req = NULL;
-
-void tag_requestBegin(const char * path, int mode) // 0->dir, 1->file
+struct request * tag_requestBegin(const char * path, int mode) // 0->dir, 1->file
 {
-  req = malloc(sizeof(struct request));
+  struct request * req = malloc(sizeof(struct request));
   req->file = NULL;
   req->realpath = NULL;
   req->headTags = NULL;
-  char * p = strdup(path); // TO FREE
+  char * p = strdup(path);
 
   if (mode == 1) {
     // Realpath
@@ -62,9 +60,10 @@ void tag_requestBegin(const char * path, int mode) // 0->dir, 1->file
   free(p);
 
   LOG("REQUEST BUILD \n");
+  return req;
 }
 
-void tag_requestEnd()
+void tag_requestEnd(struct request * req)
 {
   if (req != NULL) {
     struct tagNode *elt, *it;
@@ -86,42 +85,32 @@ void tag_requestEnd()
  * File operations
  */
 
-/**
- * Récupère le nom du fichier à partir du nom complet.
- * Exemple : /foo/bar/toto -> toto
- *
- * \param path nom complet
- * \return nom du fichier
- */
-char *tag_realpath(const char *path)
-{
-  char *realpath;
-  /* prepend dirpath since the daemon runs in '/' */
-  char * begin_file = strrchr(path,'/');
-  asprintf(&realpath, "%s/%s", dirpath, begin_file ? ++begin_file : path);
-  LOG("realpath : %s \n",realpath);
-  return realpath;
-}
-
 /* get attributes */
 static int tag_getattr(const char *path, struct stat *stbuf)
 {
-  char *realpath = tag_realpath(path);
+  struct request * req = tag_requestBegin(path,1);
+
+  
   int res;
+  res = stat(req->realpath, stbuf);
+  
+  char * endPath = strrchr(req->realpath,'/');
+  ++endPath; // Fichier ou tag
 
-  //LOG("getattr '%s'\n", path);
-
-  /* DONE try to stat the actual file */
-
-  /* if the file doesn't exist, assume it's a virtual grepped directory and stat the main directory instead */
-  //LOG("statDir : %s \n",realpath);
-  res = stat(realpath, stbuf);
-  if (res == -1) {
-    //LOG("statDir : %s \n",dirpath);
-    res = stat(dirpath, stbuf);
+  if (endPath[0] != '\0' && strchr(endPath,'.') == NULL && res == -1) { // Tag
+     // C'est un répertoire virtuel, stat le répertoire racine.
+    if (res == -1) {
+      res = stat(dirpath, stbuf);
+    }
+    res = db_tagExist(endPath) ? 0 : -ENOENT;
   }
-  //LOG("getattr returning %s\n", strerror(-res));
-  free(realpath);
+
+  if (res == -1)
+    res = -ENOENT;
+  
+  LOG("getattr %s returning %s\n", req->realpath ,strerror(-res));
+  tag_requestEnd(req);
+  
   return res;
 }
 
@@ -130,97 +119,100 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
 {
   int res = 0;
 
-  tag_requestBegin(path,0);
+  struct request * req = tag_requestBegin(path,0);
   
   LOG("readdir '%s'\n", path);
   
   struct fileNode * files = NULL;
   files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
 
-  // Que les fichiers qui matchent tous les tags
-
-  if (req->headTags != NULL) {
-    // Pour chaque tags qui suivent.
-    for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
-      struct fileNode *elt, *it;
-      struct tagHash *th;
+  if (files != NULL) {
+    // Que les fichiers qui matchent tous les tags
+    if (req->headTags != NULL) {
+      // Pour chaque tags qui suivent.
+      for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
+	struct fileNode *elt, *it;
+	struct tagHash *th;
       
-      DL_FOREACH_SAFE(files,elt,it) {
-	th = NULL;
-	// Recherche du tag
-	HASH_FIND_STR(elt->file->headTags, tn->name, th);
-	if (th == NULL) {
-	  DL_DELETE(files,elt);
-	  free(elt);
+	DL_FOREACH_SAFE(files,elt,it) {
+	  th = NULL;
+	  // Recherche du tag
+	  HASH_FIND_STR(elt->file->headTags, tn->name, th);
+	  if (th == NULL) {
+	    DL_DELETE(files,elt);
+	    free(elt);
+	  }
 	}
       }
     }
-  }
 
-  struct tagHash *availableTags = NULL, *at = NULL, *it = NULL;
+    struct tagHash *availableTags = NULL, *at = NULL, *it = NULL;
 
-  for(struct fileNode * file = files; file != NULL ; file = file->next) {
-    struct stat stbuf;
-    struct tagHash *th;
-    for(th = file->file->headTags ; th != NULL ; th = th->hh.next){
-      at = NULL;
-      HASH_FIND_STR(availableTags, th->name, at);
-      if (at == NULL) {
-	LOG("READDIR new available tag %s \n",th->name);
-	at = malloc(sizeof(struct tagHash));
-	at->name = strdup(th->name);
-	at->headFiles = NULL;
-	HASH_ADD_KEYPTR( hh, availableTags, at->name, strlen(at->name), at );
-      }
-    } 
-    res = tag_getattr(file->file->name, &stbuf);
-    filler(buf, file->file->name, NULL, 0);  
-  }
-
-  LOG("READDIR fichiers OK");
-
-  // Retirer les tags filtrés des tags disponible.
-  for (struct tagNode *tn = req->headTags; tn != NULL; tn = tn->next){
-    struct tagHash *th;
-      
-    th = NULL;
-    // Recherche du tag
-    LOG("READDIR filtre tag : %s \n", tn->name);
-    HASH_FIND_STR(availableTags, tn->name, th);
-    if (th != NULL) {
-      LOG("READDIR retire tag valide \n");
-      HASH_DEL(availableTags, th);
-      free(th->name);
-      free(th);
+    for(struct fileNode * file = files; file != NULL ; file = file->next) {
+      struct tagHash *th;
+      for(th = file->file->headTags ; th != NULL ; th = th->hh.next){
+	at = NULL;
+	HASH_FIND_STR(availableTags, th->name, at);
+	if (at == NULL) {
+	  LOG("READDIR new available tag %s \n",th->name);
+	  at = malloc(sizeof(struct tagHash));
+	  at->name = strdup(th->name);
+	  at->headFiles = NULL;
+	  HASH_ADD_KEYPTR( hh, availableTags, at->name, strlen(at->name), at );
+	}
+      } 
+      //res = tag_getattr(file->file->name, &stbuf);
+      filler(buf, file->file->name, NULL, 0);  
     }
-  }
 
-  LOG("READDIR Ajout tag au res \n");
-  // Ajouter au résultat les tags valides.
-  HASH_ITER(hh, availableTags, at, it) {
-    HASH_DEL(availableTags, at);
+    LOG("READDIR fichiers OK");
 
-    LOG("READDIR tagres : %s \n", at->name);
-    filler(buf, at->name, NULL, 0);
+    // Retirer les tags filtrés des tags disponible.
+    for (struct tagNode *tn = req->headTags; tn != NULL; tn = tn->next){
+      struct tagHash *th;
+      
+      th = NULL;
+      // Recherche du tag
+      LOG("READDIR filtre tag : %s \n", tn->name);
+      HASH_FIND_STR(availableTags, tn->name, th);
+      if (th != NULL) {
+	LOG("READDIR retire tag valide \n");
+	HASH_DEL(availableTags, th);
+	free(th->name);
+	free(th);
+      }
+    }
+
+    LOG("READDIR Ajout tag au res \n");
+    // Ajouter au résultat les tags valides.
+    HASH_ITER(hh, availableTags, at, it) {
+      HASH_DEL(availableTags, at);
+
+      LOG("READDIR tagres : %s \n", at->name);
+      filler(buf, at->name, NULL, 0);
     
-    free(at->name);
-    free(at);
+      free(at->name);
+      free(at);
+    }
+
+    LOG("READDIR nettoyage\n");
+    
+    db_deleteFileList(files);
+    
+    LOG("readdir returning %s\n", strerror(-res));
+  } else {
+    res = ENOENT;
+    LOG("readdir returning %s\n", strerror(res));
   }
-
-  LOG("READDIR nettoyage\n");
-  
-  db_deleteFileList(files);
- 
-  LOG("readdir returning %s\n", strerror(-res));
-
-  tag_requestEnd();
+  tag_requestEnd(req);
   return 0;
 }
 
 /* read the grepped contents of the file */
 int tag_read (const char *path, char *buffer, size_t len, off_t off, struct fuse_file_info *fi)
 {
-  char *realpath = tag_realpath(path);
+  struct request * req = tag_requestBegin(path,1);
+  char *realpath = req->realpath;
   char *command;
   FILE *fd;
   char *cmdoutput;
@@ -273,7 +265,8 @@ int tag_read (const char *path, char *buffer, size_t len, off_t off, struct fuse
     LOG("read returning %s\n", strerror(-res));
   else
     LOG("read returning success (read %d)\n", res);
-  free(realpath);
+
+  tag_requestEnd(req);
   return res;
 }
 

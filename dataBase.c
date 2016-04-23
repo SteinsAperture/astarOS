@@ -64,6 +64,13 @@ void db_addFile(char* fileName)
   } 
 }
 
+int db_tagExist(char* tagName)
+{
+  struct tagHash* th = NULL;
+  HASH_FIND_STR(tagTable, tagName, th);
+  return th != NULL;
+}
+
 struct fileNode* db_getFileList(char* tagName)
 {
 

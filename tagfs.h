@@ -22,5 +22,8 @@ struct request{
   struct tagNode * headTags;
 };
 
-void tag_requestBegin(const char * path, int mode);
-void tag_requestEnd();
+struct request * tag_requestBegin(const char * path, int mode);
+void tag_requestEnd(struct request * req);
+static int tag_getattr(const char *path, struct stat *stbuf);
+static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi);
+int tag_read (const char *path, char *buffer, size_t len, off_t off, struct fuse_file_info *fi);

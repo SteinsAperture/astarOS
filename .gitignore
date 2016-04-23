@@ -2,3 +2,4 @@
 tagfs
 *.o
 *.log
+mnt/*

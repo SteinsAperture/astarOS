@@ -35,6 +35,7 @@ struct fileNode* db_getFileList(char* tagName);
 void db_deleteFileList(struct fileNode * fileList);
 
 void db_addFile(char* fileName);
+int db_tagExist(char* tagName);
 
 void test(void);
 
