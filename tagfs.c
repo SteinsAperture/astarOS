@@ -5,18 +5,7 @@
 #define _GNU_SOURCE
 #define FUSE_USE_VERSION 26
 
-#include <fuse.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/types.h>
-#include <dirent.h>
-#include "dataFile.h"
-#include "dataBase.h"
+#include "tagfs.h"
 
 static DIR *dir;
 static char *dirpath;
@@ -29,10 +18,73 @@ static char *dirpath;
 FILE *mylog;
 #define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
 
+
+
+
+/*************************
+ * TODO
+ */
+
+struct request * req = NULL;
+
+void tag_requestBegin(const char * path, int mode) // 0->dir, 1->file
+{
+  req = malloc(sizeof(struct request));
+  req->file = NULL;
+  req->realpath = NULL;
+  req->headTags = NULL;
+  char * p = strdup(path); // TO FREE
+
+  if (mode == 1) {
+    // Realpath
+    char *beginFile = strrchr(p,'/');
+    *beginFile = '\0'; // Permet de stoper strtok avant le fichier.
+    ++beginFile; // Décalage pour lecture du fichier.
+    asprintf(&req->realpath, "%s/%s", dirpath, beginFile ? beginFile : path);
+    req->file = strdup(beginFile);
+    LOG("REQUEST realpath : %s \n", req->realpath);
+    LOG("REQUEST file : %s \n", req->file);
+  }
+  
+  char * token = strtok(p,"/");
+  while (token != NULL) {
+    LOG("REQUEST tagDIR : %s \n",token);
+
+    struct tagNode * tn = malloc(sizeof(struct tagNode));
+    tn->name = strdup(token);
+    tn->next = tn->prev = NULL;
+
+    DL_APPEND(req->headTags, tn);
+    
+    token = strtok(NULL,"/");
+  }
+
+  free(p);
+
+  LOG("REQUEST BUILD \n");
+}
+
+void tag_requestEnd()
+{
+  if (req != NULL) {
+    struct tagNode *elt, *it;
+    
+    DL_FOREACH_SAFE(req->headTags,elt,it) {
+      DL_DELETE(req->headTags,elt);
+      free(elt->name);
+      free(elt);
+    }
+    if (req->file != NULL)
+      free(req->file);
+    if (req->realpath != NULL)
+      free(req->realpath);
+    req = NULL;
+  }
+}
+
 /*************************
  * File operations
  */
-
 
 /**
  * Récupère le nom du fichier à partir du nom complet.
@@ -57,18 +109,18 @@ static int tag_getattr(const char *path, struct stat *stbuf)
   char *realpath = tag_realpath(path);
   int res;
 
-  LOG("getattr '%s'\n", path);
+  //LOG("getattr '%s'\n", path);
 
   /* DONE try to stat the actual file */
 
   /* if the file doesn't exist, assume it's a virtual grepped directory and stat the main directory instead */
-  LOG("statDir : %s \n",realpath);
+  //LOG("statDir : %s \n",realpath);
   res = stat(realpath, stbuf);
   if (res == -1) {
-    LOG("statDir : %s \n",dirpath);
+    //LOG("statDir : %s \n",dirpath);
     res = stat(dirpath, stbuf);
   }
-  LOG("getattr returning %s\n", strerror(-res));
+  //LOG("getattr returning %s\n", strerror(-res));
   free(realpath);
   return res;
 }
@@ -76,21 +128,92 @@ static int tag_getattr(const char *path, struct stat *stbuf)
 /* list files within directory */
 static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
-  struct dirent *dirent;
   int res = 0;
 
+  tag_requestBegin(path,0);
+  
   LOG("readdir '%s'\n", path);
+  
+  struct fileNode * files = NULL;
+  files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
 
-  rewinddir(dir);
-  while ((dirent = readdir(dir)) != NULL) {
-    struct stat stbuf;
-    res = tag_getattr(dirent->d_name, &stbuf);
-    /* TODO only files whose contents matches tags in path */
-    /* TODO only list files, don't list directories */
-    filler(buf, dirent->d_name, NULL, 0);
+  // Que les fichiers qui matchent tous les tags
+
+  if (req->headTags != NULL) {
+    // Pour chaque tags qui suivent.
+    for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
+      struct fileNode *elt, *it;
+      struct tagHash *th;
+      
+      DL_FOREACH_SAFE(files,elt,it) {
+	th = NULL;
+	// Recherche du tag
+	HASH_FIND_STR(elt->file->headTags, tn->name, th);
+	if (th == NULL) {
+	  DL_DELETE(files,elt);
+	  free(elt);
+	}
+      }
+    }
   }
 
+  struct tagHash *availableTags = NULL, *at = NULL, *it = NULL;
+
+  for(struct fileNode * file = files; file != NULL ; file = file->next) {
+    struct stat stbuf;
+    struct tagHash *th;
+    for(th = file->file->headTags ; th != NULL ; th = th->hh.next){
+      at = NULL;
+      HASH_FIND_STR(availableTags, th->name, at);
+      if (at == NULL) {
+	LOG("READDIR new available tag %s \n",th->name);
+	at = malloc(sizeof(struct tagHash));
+	at->name = strdup(th->name);
+	at->headFiles = NULL;
+	HASH_ADD_KEYPTR( hh, availableTags, at->name, strlen(at->name), at );
+      }
+    } 
+    res = tag_getattr(file->file->name, &stbuf);
+    filler(buf, file->file->name, NULL, 0);  
+  }
+
+  LOG("READDIR fichiers OK");
+
+  // Retirer les tags filtrés des tags disponible.
+  for (struct tagNode *tn = req->headTags; tn != NULL; tn = tn->next){
+    struct tagHash *th;
+      
+    th = NULL;
+    // Recherche du tag
+    LOG("READDIR filtre tag : %s \n", tn->name);
+    HASH_FIND_STR(availableTags, tn->name, th);
+    if (th != NULL) {
+      LOG("READDIR retire tag valide \n");
+      HASH_DEL(availableTags, th);
+      free(th->name);
+      free(th);
+    }
+  }
+
+  LOG("READDIR Ajout tag au res \n");
+  // Ajouter au résultat les tags valides.
+  HASH_ITER(hh, availableTags, at, it) {
+    HASH_DEL(availableTags, at);
+
+    LOG("READDIR tagres : %s \n", at->name);
+    filler(buf, at->name, NULL, 0);
+    
+    free(at->name);
+    free(at);
+  }
+
+  LOG("READDIR nettoyage\n");
+  
+  db_deleteFileList(files);
+ 
   LOG("readdir returning %s\n", strerror(-res));
+
+  tag_requestEnd();
   return 0;
 }
 
@@ -182,14 +305,26 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  df_load(dirpath);
-  argv++;
-  argc--;
+  struct dirent *dirent;
+  rewinddir(dir);
 
   mylog = fopen(LOGFILE, "a"); /* append logs to previous executions */
   LOG("\n");
 
   LOG("starting tagfs in %s\n", dirpath);
+
+  
+  while ((dirent = readdir(dir)) != NULL) {
+    if (dirent->d_name[0] != '.') {
+      LOG("INDIR : %s \n",dirent->d_name);
+      db_addFile(dirent->d_name);
+    }
+  }
+   
+  df_load(dirpath);
+  argv++;
+  argc--;
+
   err = fuse_main(argc, argv, &tag_oper, NULL);
   LOG("stopped tagfs with return code %d\n", err);
 

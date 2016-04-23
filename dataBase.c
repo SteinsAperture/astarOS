@@ -3,60 +3,133 @@
 FILE *mylog = NULL;
 #define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
 
-struct tag* hashTable = NULL;
-
+struct tagHash* tagTable = NULL;
+struct fileHash* fileTable = NULL;
 
 void db_addTag(char* fileName, char* tagName)
 {
-  mylog = mylog ? mylog : fopen(LOGFILE, "a"); /* append logs to previous executions */
-  LOG("FIND TAGNAME : %s\t FILENAME : %s",tagName, fileName );
-  struct tag* t = NULL;
-  HASH_FIND_STR(hashTable, tagName, t);
+  mylog = mylog ? mylog : fopen(LOGFILE, "a");
+  LOG("FIND TAGNAME : %s\t FILENAME : %s \n",tagName, fileName );
+
+  // Recherche du tag
+  struct tagHash* th = NULL;
+  HASH_FIND_STR(tagTable, tagName, th);
+
+  // Tentative d'ajout du fichier
+  db_addFile(fileName);
   
-
-  struct file* f = malloc(sizeof(struct file));
-
-  f->name = strdup(fileName);
-
-  f->next = f->prev = NULL;
-
-  //Le tag existe déjà ?
-  if( t == NULL )
-    {
-      //il existe pas : on le met
-      LOG("CREATE %s", tagName);
-      t = malloc(sizeof(struct tag));
-      strcpy(t->name, tagName);
-      t->headFiles = NULL;
-
-      HASH_ADD_STR( hashTable, name, t);
-    } 
+  // Recherche du fichier
+  struct fileHash* fh = NULL;
+  HASH_FIND_STR(fileTable, fileName, fh);
   
-  LOG("APPEND %s", fileName);
-  DL_APPEND(t->headFiles, f);
+  //Le tag n'existe pas ?
+  if( th == NULL ) {
+    LOG("CREATE TAG %s \n", tagName);
+    th = malloc(sizeof(struct tagHash));
+    th->name = strdup(tagName); // Mémoire non free
+    th->headFiles = NULL;
+
+    HASH_ADD_KEYPTR( hh, tagTable, th->name, strlen(th->name), th );
+  } 
+  
+  // Le tag existe, stocké dans th.
+
+  // Ajouter le fichier dans la liste de fichiers du tag.
+  struct fileNode* fn = malloc(sizeof(struct fileNode));
+  fn->file = fh;
+  fn->next = fn->prev = NULL;
+  DL_APPEND(th->headFiles, fn);
+
+  // Ajouter le tag dans la hashTable de tags du fichier.
+  struct tagHash* fth = malloc(sizeof(struct tagHash));
+  fth->name = strdup(tagName); // Mémoire non free
+  fth->headFiles = NULL;
+  HASH_ADD_KEYPTR( hh, fh->headTags, fth->name, strlen(fth->name), fth);
 }
 
-struct file* db_getFiles(char* tagName)
+void db_addFile(char* fileName)
 {
-  struct tag* f = NULL;
-  HASH_FIND_STR(hashTable, tagName, f);
-  return f ? f->headFiles : NULL;
+  // Recherche du fichier
+  struct fileHash* fh = NULL;
+  HASH_FIND_STR(fileTable, fileName, fh);
+  
+  //Le fichier n'existe pas ? Alors l'ajouter.
+  if( fh == NULL ) {
+    LOG("CREATE FILE %s \n", fileName);
+    fh = malloc(sizeof(struct fileHash));
+    fh->name = strdup(fileName);
+    fh->headTags = NULL;
+
+    HASH_ADD_KEYPTR( hh, fileTable, fh->name, strlen(fh->name), fh );
+  } 
 }
 
+struct fileNode* db_getFileList(char* tagName)
+{
+
+  LOG("DATABASE getFileList : %s \n", tagName);
+  struct tagHash* th = NULL; // Tag à trouver
+  HASH_FIND_STR(tagTable, tagName, th);
+
+  struct fileNode *head = NULL; // Liste de fichier.
+  
+  if ( th == NULL) { // Pas de tag trouvé
+    if (strlen(tagName) == 0) { // tag vide = Tous les fichiers
+      LOG("ALL FILE \n");
+      struct fileHash * fh;
+      for(fh = fileTable; fh != NULL ; fh = fh->hh.next) {
+	struct fileNode * fn = malloc(sizeof(struct fileNode));
+	fn->file = fh;
+	fn->next = fn->prev = NULL;
+	DL_APPEND(head, fn);
+      }
+    } else {
+      LOG("AUCUN \n");
+      return NULL;
+    }
+  } else { // Les fichiers d'un tag
+    LOG("PAR TAG \n");
+    struct fileNode * it;
+    for(it = th->headFiles ; it != NULL ; it = it->next) {
+      struct fileNode * fn = malloc(sizeof(struct fileNode));
+      fn->file = it->file;
+      fn->next = fn->prev = NULL;
+      DL_APPEND(head, fn);
+    } 
+  }
+  
+  return head; // Danger, devra être libéré.
+}
+
+void db_deleteFileList(struct fileNode * fileList) {
+  if (fileList != NULL) {
+    struct fileNode *elt, *it;
+
+    DL_FOREACH_SAFE(fileList,elt,it) {
+      DL_DELETE(fileList,elt);
+      free(elt);
+    }
+  }
+}
+
+struct fileHash* db_getAllFiles()
+{
+  return fileTable;
+}
 
 void test(void)
 {
-  struct tag* s;
+  struct tagHash* s;
 
   LOG("HERE\n");
 
-  for(s=hashTable; s != NULL ; s=s->hh.next) 
+  for(s=tagTable; s != NULL ; s=s->hh.next) 
     {
       LOG("tag id %s:", s->name);
-      struct file *f;
+      struct fileNode *f;
       for(f = s->headFiles ; f != NULL ; f = f->next)
 	{
-	  LOG("%s\t", f->name);
+	  LOG("%s\t", f->file->name);
 	} 
       LOG("\n");
     }

@@ -9,24 +9,32 @@
 
 #define TAGNAME_SIZE 128
 
-struct file{
-  char* name;
-  struct file *next, *prev;
-};
-
-struct tag{
-  char name[TAGNAME_SIZE];
-  struct file* headFiles;
+struct tagHash{
+  char * name;
+  struct fileNode* headFiles;
   UT_hash_handle hh;         /* makes this structure hashable */
 };
 
+struct fileHash{
+  char * name;
+  struct tagHash* headTags;
+  UT_hash_handle hh;
+};
+
+struct fileNode{
+  struct fileHash* file;
+  struct fileNode *next, *prev;
+};
 
 //add a tag in the hashtable
 void db_addTag(char* fileName, char* tagName);
 
 //return files by tag
-struct file* db_getFiles(char* tagName);
+struct fileNode* db_getFileList(char* tagName);
 
+void db_deleteFileList(struct fileNode * fileList);
+
+void db_addFile(char* fileName);
 
 void test(void);
 
