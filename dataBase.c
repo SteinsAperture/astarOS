@@ -148,6 +148,7 @@ void db_deleteTagTable()
   struct tagHash *current_tag,*tmp;
 
   HASH_ITER(hh,tagTable,current_tag,tmp){
+    db_deleteFileList(current_tag->headFiles);
     HASH_DEL(tagTable,current_tag);
     free(current_tag);
   }
