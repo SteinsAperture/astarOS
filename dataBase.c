@@ -142,3 +142,28 @@ void test(void)
    }
 }
 
+
+void db_deleteTagTable()
+{
+  struct tagHash *current_tag,*tmp;
+
+  HASH_ITER(hh,tagTable,current_tag,tmp){
+    HASH_DEL(tagTable,current_tag);
+    free(current_tag);
+  }
+}
+
+void db_deleteFileTable(){
+  struct fileHash *current_file,*tmp;
+
+  HASH_ITER(hh,fileTable,current_file,tmp){
+    struct tagHash *current_tag,*tmp2;
+
+    HASH_ITER(hh,current_file->headTags,current_tag,tmp2){
+      HASH_DEL(current_file->headTags,current_tag);
+      free(current_tag);
+    }
+    HASH_DEL(fileTable,current_file);
+    free(current_file);
+  }
+}
