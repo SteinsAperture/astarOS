@@ -32,7 +32,7 @@ void db_addTag(char* fileName, char* tagName);
 //return files by tag
 struct fileNode* db_getFileList(char* tagName);
 
-struct tagHash* db_getTagHash(char* fileName);
+struct tagHash* db_linkExist(char* fileName,char* tagName);
 
 struct fileHash* db_getAllFiles();
 
