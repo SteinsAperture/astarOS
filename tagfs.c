@@ -18,9 +18,6 @@ static char *dirpath;
 FILE *mylog;
 #define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
 
-
-
-
 /*************************
  * TODO
  */
@@ -89,7 +86,6 @@ void tag_requestEnd(struct request * req)
 static int tag_getattr(const char *path, struct stat *stbuf)
 {
   struct request * req = tag_requestBegin(path,1);
-
   
   int res;
   res = stat(req->realpath, stbuf);
@@ -97,12 +93,21 @@ static int tag_getattr(const char *path, struct stat *stbuf)
   char * endPath = strrchr(req->realpath,'/');
   ++endPath; // Fichier ou tag
 
-  if (endPath[0] != '\0' && strchr(endPath,'.') == NULL && res == -1) { // Tag
-     // C'est un répertoire virtuel, stat le répertoire racine.
-    if (res == -1) {
-      res = stat(dirpath, stbuf);
+  if (res != -1) {
+    struct tagNode *elt; 
+
+    DL_FOREACH(req->headTags,elt) {
+      if (!db_linkExist(req->file, elt->name)) {
+	res = -ENOENT;
+	break;
+      }
     }
-    res = db_tagExist(endPath) ? 0 : -ENOENT;
+  }
+  
+  if ((res == -ENOENT || res == -1) && endPath[0] != '\0' && strchr(endPath,'.') == NULL) { // Tag
+     // C'est un répertoire virtuel, stat le répertoire racine.
+    res = stat(dirpath, stbuf);
+    res = db_tagExist(endPath) ? 0 : 0;
   }
 
   if (res == -1)
@@ -113,6 +118,66 @@ static int tag_getattr(const char *path, struct stat *stbuf)
   
   return res;
 }
+
+
+static int tag_opendir(const char* path, struct fuse_file_info* fi)
+{
+  int res = 0;
+  LOG("OPENDIR %s\n", path);
+  struct request * req = tag_requestBegin(path,0);
+  
+  
+  struct fileNode * files = NULL;
+  files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
+
+  if (files != NULL) {
+    // Que les fichiers qui matchent tous les tags
+    if (req->headTags != NULL) {
+      // Pour chaque tags qui suivent.
+      for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
+	struct fileNode *elt, *it;
+	struct tagHash *th;
+      
+	DL_FOREACH_SAFE(files,elt,it) {
+	  th = NULL;
+	  // Recherche du tag
+	  HASH_FIND_STR(elt->file->headTags, tn->name, th);
+	  if (th == NULL) {
+	    DL_DELETE(files,elt);
+	    free(elt);
+	  }
+	}
+      }
+    }
+
+    struct fileNode *elt, *it;
+      
+    DL_FOREACH_SAFE(files,elt,it) {
+      LOG("file : %s \t",elt->file->name);
+    }
+    
+    struct fileNode *eltForCount;
+    int count = 0;
+    DL_COUNT(files,eltForCount,count);
+
+    if (count == 0)
+      res = -ENOENT;
+
+    LOG("OPENDIR nettoyage\n");
+    
+    db_deleteFileList(files);
+    
+    LOG("readdir returning %s\n", strerror(-res));
+  } else {
+    res = -ENOENT;
+    LOG("readdir returning %s\n", strerror(-res));
+  }
+  
+  tag_requestEnd(req);
+  LOG("OPENDIR END \n");
+  return res;
+}
+
 
 /* list files within directory */
 static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
@@ -201,11 +266,11 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
     
     LOG("readdir returning %s\n", strerror(-res));
   } else {
-    res = ENOENT;
-    LOG("readdir returning %s\n", strerror(res));
+    res = -ENOENT;
+    LOG("readdir returning %s\n", strerror(-res));
   }
   tag_requestEnd(req);
-  return 0;
+  return res;
 }
 
 /* read the grepped contents of the file */
@@ -270,10 +335,55 @@ int tag_read (const char *path, char *buffer, size_t len, off_t off, struct fuse
   return res;
 }
 
+static int tag_link(const char* from, const char* to){
+  int res = 0;
+  
+  LOG("LINK %s to %s \n", from, to);
+  struct request * req1 = tag_requestBegin(to,1),
+    *req2 = tag_requestBegin(from,1);
+
+  if (strcmp(req1->file,req2->file) == 0) {
+    struct tagNode *elt; 
+
+    DL_FOREACH(req1->headTags,elt) {
+      if (!db_linkExist(req1->file, elt->name)) {
+	db_addTag(req1->file, elt->name);
+      }
+    }
+  } else {
+    res = -ENOENT;
+  }
+  tag_requestEnd(req1);
+  tag_requestEnd(req2);
+  return res;
+}
+
+
+static int tag_readlink(const char* path, char* buf, size_t size){
+  LOG("READLINK %s - %s - %lu \n", path, buf, size);
+  return 0;
+}
+
+static int tag_symlink(const char* to, const char* from){
+  LOG("SYMLINK %s from %s \n", to, from);
+  return 0;
+}
+/*
+static int tag_access(const char* path, int mask){
+
+  LOG("ACCESS %s \n",path);
+  return 0;
+}
+*/
 static struct fuse_operations tag_oper = {
   .getattr = tag_getattr,
   .readdir = tag_readdir,
   .read = tag_read,
+  .link = tag_link,
+  .readlink = tag_readlink,
+  .symlink = tag_symlink,
+  .opendir = tag_opendir,
+  //.access = tag_access,
 };
 
 /**************************

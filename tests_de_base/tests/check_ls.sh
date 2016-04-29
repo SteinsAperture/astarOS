@@ -74,7 +74,7 @@ else
     echo ""
 fi
 
-INEXISTANT_EXPECTED="/bin/ls: cannot access mnt/foo: No such file or directory"
+INEXISTANT_EXPECTED="/bin/ls: cannot open directory mnt/foo: No such file or directory"
 if test "$INEXISTANT" == "$INEXISTANT_EXPECTED"
 then
     echo "Test6 ... Pass"

@@ -6,14 +6,12 @@ export LC_ALL=C
 mkdir -p mnt
 ./tagfs $PWD/images $PWD/mnt
 sleep 1
-mkdir mnt/ecole2
-mkdir mnt/ecole
-ln mnt/ipb.jpeg mnt/ecole2
-mv mnt/ecole2/ipb.jpeg mnt/ecole/
-ln mnt/marmotte.jpeg mnt/gentil/
-rm mnt/mechant/rabbit.jpeg
-rm mnt/monty/animal/rabbit.jpeg
-mv mnt/mechant/coyote.jpeg mnt/gentil/cartoon/coyote.jpeg
+ln mnt/ipb.jpeg mnt/ecole/ipb.jpeg
+mv mnt/ecole/ipb.jpeg mnt/ecoleSup/
+ln mnt/marmotte.jpeg mnt/gentil/doux/calme/marmotte.jpeg
+#rm mnt/mechant/rabbit.jpeg
+#rm mnt/monty/animal/rabbit.jpeg
+#mv mnt/mechant/coyote.jpeg mnt/gentil/cartoon/coyote.jpeg
 
 fusermount -u mnt
 

@@ -1,10 +1,13 @@
 #include "dataBase.h"
 #define LOGFILE "tagfs.log"
+
 FILE *mylog = NULL;
 #define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
 
 struct tagHash* tagTable = NULL;
 struct fileHash* fileTable = NULL;
+
+char* strdup(const char * s);
 
 void db_addTag(char* fileName, char* tagName)
 {
@@ -80,54 +83,48 @@ struct fileNode* db_getFileList(char* tagName)
 
   struct fileNode *head = NULL; // Liste de fichier.
   
+
   if ( th == NULL) { // Pas de tag trouvé
     if (strlen(tagName) == 0) { // tag vide = Tous les fichiers
       LOG("ALL FILE \n");
       struct fileHash * fh;
       for(fh = fileTable; fh != NULL ; fh = fh->hh.next) {
-       struct fileNode * fn = malloc(sizeof(struct fileNode));
-       fn->file = fh;
-       fn->next = fn->prev = NULL;
-       DL_APPEND(head, fn);
+	struct fileNode * fn = malloc(sizeof(struct fileNode));
+	fn->file = fh;
+	fn->next = fn->prev = NULL;
+	DL_APPEND(head, fn);
       }
     } else {
       LOG("AUCUN \n");
       return NULL;
     }
   } else { // Les fichiers d'un tag
-  LOG("PAR TAG \n");
-  struct fileNode * it;
-  for(it = th->headFiles ; it != NULL ; it = it->next) {
-    struct fileNode * fn = malloc(sizeof(struct fileNode));
-    fn->file = it->file;
-    fn->next = fn->prev = NULL;
-    DL_APPEND(head, fn);
-  } 
+    LOG("PAR TAG \n");
+    struct fileNode * it;
+    for(it = th->headFiles ; it != NULL ; it = it->next) {
+      struct fileNode * fn = malloc(sizeof(struct fileNode));
+      fn->file = it->file;
+      fn->next = fn->prev = NULL;
+      DL_APPEND(head, fn);
+    } 
+  }
+
+  return head;
 }
 
-struct tagHash* db_linkExist(char* fileName,char* tagName){
+int db_linkExist(char* fileName,char* tagName){
 
-  LOG("DATABASE getTagHash : %s \n", fileName);
+  //LOG("DATABASE getTagHash : %s \n", fileName);
   struct fileHash* fh = NULL;
   HASH_FIND_STR(fileTable,fileName,fh);
 
   if(fh == NULL){
-    LOG("AUCUN \n");
-    return NULL;
+    return 0;
   }else{
-    struct tagHash* head = NULL;
-    HASH_FIND_STR(fh->headTags,tagName,head);
-    if(head==NULL){
-      LOG("N'EXISTE PAS \n");
-      return 0;
-    }else{
-      LOG("EXISTE \n");
-      return 1;
-    }
+    struct tagHash* th = NULL;
+    HASH_FIND_STR(fh->headTags,tagName,th);
+    return th != NULL;
   }
-}
-
-  return head; // Danger, devra être libéré.
 }
 
 void db_deleteFileList(struct fileNode * fileList) {
