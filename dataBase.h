@@ -32,6 +32,8 @@ void db_addTag(char* fileName, char* tagName);
 //return files by tag
 struct fileNode* db_getFileList(char* tagName);
 
+struct fileHash* db_getAllFiles();
+
 void db_deleteFileList(struct fileNode * fileList);
 
 void db_addFile(char* fileName);

@@ -85,26 +85,26 @@ struct fileNode* db_getFileList(char* tagName)
       LOG("ALL FILE \n");
       struct fileHash * fh;
       for(fh = fileTable; fh != NULL ; fh = fh->hh.next) {
-	struct fileNode * fn = malloc(sizeof(struct fileNode));
-	fn->file = fh;
-	fn->next = fn->prev = NULL;
-	DL_APPEND(head, fn);
+       struct fileNode * fn = malloc(sizeof(struct fileNode));
+       fn->file = fh;
+       fn->next = fn->prev = NULL;
+       DL_APPEND(head, fn);
       }
     } else {
       LOG("AUCUN \n");
       return NULL;
     }
   } else { // Les fichiers d'un tag
-    LOG("PAR TAG \n");
-    struct fileNode * it;
-    for(it = th->headFiles ; it != NULL ; it = it->next) {
-      struct fileNode * fn = malloc(sizeof(struct fileNode));
-      fn->file = it->file;
-      fn->next = fn->prev = NULL;
-      DL_APPEND(head, fn);
-    } 
-  }
-  
+  LOG("PAR TAG \n");
+  struct fileNode * it;
+  for(it = th->headFiles ; it != NULL ; it = it->next) {
+    struct fileNode * fn = malloc(sizeof(struct fileNode));
+    fn->file = it->file;
+    fn->next = fn->prev = NULL;
+    DL_APPEND(head, fn);
+  } 
+}
+
   return head; // Danger, devra être libéré.
 }
 
@@ -131,14 +131,14 @@ void test(void)
   LOG("HERE\n");
 
   for(s=tagTable; s != NULL ; s=s->hh.next) 
+  {
+    LOG("tag id %s:", s->name);
+    struct fileNode *f;
+    for(f = s->headFiles ; f != NULL ; f = f->next)
     {
-      LOG("tag id %s:", s->name);
-      struct fileNode *f;
-      for(f = s->headFiles ; f != NULL ; f = f->next)
-	{
-	  LOG("%s\t", f->file->name);
-	} 
-      LOG("\n");
-    }
+     LOG("%s\t", f->file->name);
+     } 
+     LOG("\n");
+   }
 }
 
