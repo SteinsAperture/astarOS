@@ -105,6 +105,28 @@ struct fileNode* db_getFileList(char* tagName)
   } 
 }
 
+struct tagHash* db_linkExist(char* fileName,char* tagName){
+
+  LOG("DATABASE getTagHash : %s \n", fileName);
+  struct fileHash* fh = NULL;
+  HASH_FIND_STR(fileTable,fileName,fh);
+
+  if(fh == NULL){
+    LOG("AUCUN \n");
+    return NULL;
+  }else{
+    struct tagHash* head = NULL;
+    HASH_FIND_STR(fh->headTags,tagName,head);
+    if(head==NULL){
+      LOG("N'EXISTE PAS \n");
+      return 0;
+    }else{
+      LOG("EXISTE \n");
+      return 1;
+    }
+  }
+}
+
   return head; // Danger, devra être libéré.
 }
 
@@ -150,6 +172,7 @@ void db_deleteTagTable()
   HASH_ITER(hh,tagTable,current_tag,tmp){
     db_deleteFileList(current_tag->headFiles);
     HASH_DEL(tagTable,current_tag);
+    free(current_tag->name);
     free(current_tag);
   }
 }
@@ -162,9 +185,11 @@ void db_deleteFileTable(){
 
     HASH_ITER(hh,current_file->headTags,current_tag,tmp2){
       HASH_DEL(current_file->headTags,current_tag);
+      free(current_tag->name);
       free(current_tag);
     }
     HASH_DEL(fileTable,current_file);
+    free(current_file->name);
     free(current_file);
   }
 }
