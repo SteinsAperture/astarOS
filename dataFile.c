@@ -58,7 +58,6 @@ int df_save(char *path){
     perror("Fichier introuvable");
     exit(EXIT_FAILURE);
   }else{
-    char fileName[MAX];
     struct fileHash* fh;
     struct tagHash* th;
     for(fh = db_getAllFiles(); fh != NULL ; fh = fh->hh.next) {
