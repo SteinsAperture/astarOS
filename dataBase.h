@@ -9,20 +9,15 @@
 
 #define TAGNAME_SIZE 128
 
-struct tagHash{
+
+struct hashElt{
   char * name;
-  struct fileHash* headFiles;
+  struct hashElt * nextLvl;
   UT_hash_handle hh;         /* makes this structure hashable */
 };
 
-struct fileHash{
-  char * name;
-  struct tagHash* headTags;
-  UT_hash_handle hh;
-};
-
 struct fileNode{
-  struct fileHash* file;
+  struct hashElt* file;
   struct fileNode *next, *prev;
 };
 
@@ -33,8 +28,6 @@ void db_addTag(char* fileName, char* tagName);
 struct fileNode* db_getFileList(char* tagName);
 
 int db_linkExist(char* fileName,char* tagName);
-
-struct fileHash* db_getAllFiles();
 
 void db_deleteFileList(struct fileNode * fileList);
 

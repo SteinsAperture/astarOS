@@ -140,12 +140,12 @@ static int tag_opendir(const char* path, struct fuse_file_info* fi)
       // Pour chaque tags qui suivent.
       for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
 	struct fileNode *elt, *it;
-	struct tagHash *th;
+	struct hashElt *th;
       
 	DL_FOREACH_SAFE(files,elt,it) {
 	  th = NULL;
 	  // Recherche du tag
-	  HASH_FIND_STR(elt->file->headTags, tn->name, th);
+	  HASH_FIND_STR(elt->file->nextLvl, tn->name, th);
 	  if (th == NULL) {
 	    DL_DELETE(files,elt);
 	    free(elt);
@@ -201,12 +201,12 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
       // Pour chaque tags qui suivent.
       for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
 	struct fileNode *elt, *it;
-	struct tagHash *th;
+	struct hashElt *th;
       
 	DL_FOREACH_SAFE(files,elt,it) {
 	  th = NULL;
 	  // Recherche du tag
-	  HASH_FIND_STR(elt->file->headTags, tn->name, th);
+	  HASH_FIND_STR(elt->file->nextLvl, tn->name, th);
 	  if (th == NULL) {
 	    DL_DELETE(files,elt);
 	    free(elt);
@@ -215,18 +215,17 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
       }
     }
 
-    struct tagHash *availableTags = NULL, *at = NULL, *it = NULL;
-
+    struct tagHash *availableTags = NULL, *it = NULL, *at = NULL;
+    
     for(struct fileNode * file = files; file != NULL ; file = file->next) {
-      struct tagHash *th;
-      for(th = file->file->headTags ; th != NULL ; th = th->hh.next){
+      struct hashElt *th;
+      for(th = file->file->nextLvl ; th != NULL ; th = th->hh.next){
 	at = NULL;
 	HASH_FIND_STR(availableTags, th->name, at);
 	if (at == NULL) {
 	  LOG("READDIR new available tag %s \n",th->name);
 	  at = malloc(sizeof(struct tagHash));
 	  at->name = strdup(th->name);
-	  at->headFiles = NULL;
 	  HASH_ADD_KEYPTR( hh, availableTags, at->name, strlen(at->name), at );
 	}
       } 

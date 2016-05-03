@@ -16,6 +16,11 @@ struct tagNode{
   struct tagNode *next, *prev;
 };
 
+struct tagHash{
+  char * name;
+  UT_hash_handle hh;         /* makes this structure hashable */
+};
+
 struct request{
   char *file;
   char *realpath;
