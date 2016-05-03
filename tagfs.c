@@ -33,9 +33,13 @@ struct request * tag_requestBegin(const char * path, int mode) // 0->dir, 1->fil
   if (mode == 1) {
     // Realpath
     char *beginFile = strrchr(p,'/');
-    *beginFile = '\0'; // Permet de stoper strtok avant le fichier.
-    ++beginFile; // Décalage pour lecture du fichier.
-    asprintf(&req->realpath, "%s/%s", dirpath, beginFile ? beginFile : path);
+    if (beginFile != NULL) {
+      *beginFile = '\0'; // Permet de stoper strtok avant le fichier.
+      ++beginFile; // Décalage pour lecture du fichier.
+      asprintf(&req->realpath, "%s/%s", dirpath, beginFile ? beginFile : path);
+    } else {
+      beginFile = p;
+    }
     req->file = strdup(beginFile);
     LOG("REQUEST realpath : %s \n", req->realpath);
     LOG("REQUEST file : %s \n", req->file);
@@ -355,6 +359,49 @@ static int tag_link(const char* from, const char* to){
   }
   tag_requestEnd(req1);
   tag_requestEnd(req2);
+  LOG("LINK RETURN : %s", strerror(-res));
+  return res;
+}
+
+static int tag_unlink(const char* path){
+  LOG("UNLINK %s \n", path);
+
+  struct request * req = tag_requestBegin(path,1);
+
+  struct tagNode *elt;
+  int removeFile = 1;
+
+  DL_FOREACH(req->headTags,elt) {
+    removeFile = 0;
+    //db_removeTag(req->file,elt->name);
+    LOG("TAG REMOVE %s FROM %s \n",elt->name,req->file);
+  }
+
+  if (removeFile) {
+    //db_removeFile(req->file);
+    LOG("FILE REMOVE %s \n",req->file);
+  }
+
+  tag_requestEnd(req);
+  return 0;
+}
+
+static int tag_rename(const char* from, const char* to){
+  int res = 0;
+  
+  LOG("RENAME %s to %s \n", from, to);
+  struct request * req1 = tag_requestBegin(to,1),
+    *req2 = tag_requestBegin(from,1);
+
+  if (strcmp(req1->file,req2->file) == 0) {
+    res = tag_unlink(from);
+    if (res != -ENOENT)
+      res = tag_link(req2->file,to);
+  } else {
+    res = -ENOENT;
+  }
+  tag_requestEnd(req1);
+  tag_requestEnd(req2);
   return res;
 }
 
@@ -383,6 +430,8 @@ static struct fuse_operations tag_oper = {
   .readlink = tag_readlink,
   .symlink = tag_symlink,
   .opendir = tag_opendir,
+  .unlink = tag_unlink,
+  .rename = tag_rename,
   //.access = tag_access,
 };
 
