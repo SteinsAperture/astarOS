@@ -101,7 +101,7 @@ struct fileNode* db_getFileList(char* tagName)
   } else { // Les fichiers d'un tag
   LOG("PAR TAG \n");
   struct fileHash * it;
-  for(it = th->headFiles ; it != NULL ; it = it->hh.next) {
+  for(it = fileTable ; it != NULL ; it = it->hh.next) {
     struct fileNode * fn = malloc(sizeof(struct fileNode));
     fn->file = it;
     fn->next = fn->prev = NULL;
