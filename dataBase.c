@@ -37,15 +37,15 @@ void db_addTag(char* fileName, char* tagName)
 
   // Le tag existe, stocké dans th.
 
-  // Ajouter le fichier dans la liste de fichiers du tag.
-  struct fileNode* fn = malloc(sizeof(struct fileNode));
-  fn->file = fh;
-  fn->next = fn->prev = NULL;
-  DL_APPEND(th->headFiles, fn);
+  // Ajouter le fichier dans la hashTable de fichiers du tag.
+  struct fileHash* fn = malloc(sizeof(struct fileHash));
+  fn->name = strdup(fileName);
+  fn->headTags = NULL;
+  HASH_ADD_KEYPTR(hh, th->headFiles , fn->name, strlen(fn->name), fn);
 
   // Ajouter le tag dans la hashTable de tags du fichier.
   struct tagHash* fth = malloc(sizeof(struct tagHash));
-  fth->name = strdup(tagName); // Mémoire non free
+  fth->name = strdup(tagName);
   fth->headFiles = NULL;
   HASH_ADD_KEYPTR( hh, fh->headTags, fth->name, strlen(fth->name), fth);
 }
@@ -89,25 +89,25 @@ struct fileNode* db_getFileList(char* tagName)
       LOG("ALL FILE \n");
       struct fileHash * fh;
       for(fh = fileTable; fh != NULL ; fh = fh->hh.next) {
-	struct fileNode * fn = malloc(sizeof(struct fileNode));
-	fn->file = fh;
-	fn->next = fn->prev = NULL;
-	DL_APPEND(head, fn);
+       struct fileNode * fn = malloc(sizeof(struct fileNode));
+       fn->file = fh;
+       fn->next = fn->prev = NULL;
+       DL_APPEND(head, fn);
       }
     } else {
       LOG("AUCUN \n");
       return NULL;
     }
   } else { // Les fichiers d'un tag
-    LOG("PAR TAG \n");
-    struct fileNode * it;
-    for(it = th->headFiles ; it != NULL ; it = it->next) {
-      struct fileNode * fn = malloc(sizeof(struct fileNode));
-      fn->file = it->file;
-      fn->next = fn->prev = NULL;
-      DL_APPEND(head, fn);
-    }
+  LOG("PAR TAG \n");
+  struct fileHash * it;
+  for(it = th->headFiles ; it != NULL ; it = it->hh.next) {
+    struct fileNode * fn = malloc(sizeof(struct fileNode));
+    fn->file = it;
+    fn->next = fn->prev = NULL;
+    DL_APPEND(head, fn);
   }
+}
 
   return head;
 }
@@ -141,24 +141,6 @@ void db_deleteFileList(struct fileNode * fileList) {
 struct fileHash* db_getAllFiles()
 {
   return fileTable;
-}
-
-void test(void)
-{
-  struct tagHash* s;
-
-  LOG("HERE\n");
-
-  for(s=tagTable; s != NULL ; s=s->hh.next)
-  {
-    LOG("tag id %s:", s->name);
-    struct fileNode *f;
-    for(f = s->headFiles ; f != NULL ; f = f->next)
-    {
-     LOG("%s\t", f->file->name);
-     }
-     LOG("\n");
-   }
 }
 
 void db_deleteTag(char* fileName, char* tagName)
@@ -208,7 +190,7 @@ void db_deleteTag(char* fileName, char* tagName)
 void db_deleteFile(char* fileName)
 {
   struct fileHash* fH;
-  struct tagHash *current_tag,*tmp;
+  struct tagHash *tH,*tmp;
 
 
   HASH_FIND_STR(fileTable, fileName, fH);
@@ -216,27 +198,27 @@ void db_deleteFile(char* fileName)
     LOG("Delete File : file not found\n");
   }
   else{
-    HASH_ITER(hh,fH->headTags,current_tag,tmp){
-      HASH_DEL(fH->headTags,current_tag);
-      free(current_tag->name);
-      free(current_tag);
+    HASH_ITER(hh,fH->headTags,tH,tmp){
+      HASH_DEL(fH->headTags,tH);
+      free(tH->name);
+      free(tH);
     }
     HASH_DEL(fileTable, fH);
     free(fH->name);
     free(fH);
   }
 
-  HASH_ITER(hh, tagTable, current_tag, tmp){
-    HASH_FIND_STR(current_tag->headFiles, fileName, fH);
+  HASH_ITER(hh, tagTable, tH, tmp){
+    HASH_FIND_STR(tH->headFiles, fileName, fH);
     if(fH != NULL){
-      HASH_DEL(current_tag->headFiles, fH);
+      HASH_DEL(tH->headFiles, fH);
       free(fH->name);
       free(fH);
 
-      if(HASH_COUNT(current_tag->headFiles) == 0){
-        HASH_DEL(tagTable, current_tag);
-        free(current_tag->name);
-        free(current_tag);
+      if(HASH_COUNT(tH->headFiles) == 0){
+        HASH_DEL(tagTable, tH);
+        free(tH->name);
+        free(tH);
       }
     }
   }
@@ -245,9 +227,14 @@ void db_deleteFile(char* fileName)
 void db_deleteTagTable()
 {
   struct tagHash *current_tag,*tmp;
+  struct fileHash *current_file,*tmp2;
 
   HASH_ITER(hh,tagTable,current_tag,tmp){
-    db_deleteFileList(current_tag->headFiles);
+    HASH_ITER(hh,current_tag->headFiles,current_file,tmp2){
+      HASH_DEL(current_tag->headFiles,current_file);
+      free(current_file->name);
+      free(current_file);
+    }
     HASH_DEL(tagTable,current_tag);
     free(current_tag->name);
     free(current_tag);
@@ -256,9 +243,10 @@ void db_deleteTagTable()
 
 void db_deleteFileTable(){
   struct fileHash *current_file,*tmp;
+  struct tagHash *current_tag,*tmp2;
 
   HASH_ITER(hh,fileTable,current_file,tmp){
-    struct tagHash *current_tag,*tmp2;
+    
 
     HASH_ITER(hh,current_file->headTags,current_tag,tmp2){
       HASH_DEL(current_file->headTags,current_tag);

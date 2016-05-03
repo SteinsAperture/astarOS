@@ -41,11 +41,12 @@ void db_deleteFileList(struct fileNode * fileList);
 void db_addFile(char* fileName);
 int db_tagExist(char* tagName);
 
+void db_deleteTag(char* fileName, char* tagName);
+void db_deleteFile(char* fileName);
+
 
 void db_deleteTagTable();
 void db_deleteFileTable();
-
-void test(void);
 
 
 #endif
