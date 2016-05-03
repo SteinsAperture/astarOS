@@ -20,11 +20,11 @@ void db_addTag(char* fileName, char* tagName)
 
   // Tentative d'ajout du fichier
   db_addFile(fileName);
-  
+
   // Recherche du fichier
   struct fileHash* fh = NULL;
   HASH_FIND_STR(fileTable, fileName, fh);
-  
+
   //Le tag n'existe pas ?
   if( th == NULL ) {
     LOG("CREATE TAG %s \n", tagName);
@@ -33,8 +33,8 @@ void db_addTag(char* fileName, char* tagName)
     th->headFiles = NULL;
 
     HASH_ADD_KEYPTR( hh, tagTable, th->name, strlen(th->name), th );
-  } 
-  
+  }
+
   // Le tag existe, stocké dans th.
 
   // Ajouter le fichier dans la liste de fichiers du tag.
@@ -55,7 +55,7 @@ void db_addFile(char* fileName)
   // Recherche du fichier
   struct fileHash* fh = NULL;
   HASH_FIND_STR(fileTable, fileName, fh);
-  
+
   //Le fichier n'existe pas ? Alors l'ajouter.
   if( fh == NULL ) {
     LOG("CREATE FILE %s \n", fileName);
@@ -64,7 +64,7 @@ void db_addFile(char* fileName)
     fh->headTags = NULL;
 
     HASH_ADD_KEYPTR( hh, fileTable, fh->name, strlen(fh->name), fh );
-  } 
+  }
 }
 
 int db_tagExist(char* tagName)
@@ -82,7 +82,7 @@ struct fileNode* db_getFileList(char* tagName)
   HASH_FIND_STR(tagTable, tagName, th);
 
   struct fileNode *head = NULL; // Liste de fichier.
-  
+
 
   if ( th == NULL) { // Pas de tag trouvé
     if (strlen(tagName) == 0) { // tag vide = Tous les fichiers
@@ -106,7 +106,7 @@ struct fileNode* db_getFileList(char* tagName)
       fn->file = it->file;
       fn->next = fn->prev = NULL;
       DL_APPEND(head, fn);
-    } 
+    }
   }
 
   return head;
@@ -149,18 +149,98 @@ void test(void)
 
   LOG("HERE\n");
 
-  for(s=tagTable; s != NULL ; s=s->hh.next) 
+  for(s=tagTable; s != NULL ; s=s->hh.next)
   {
     LOG("tag id %s:", s->name);
     struct fileNode *f;
     for(f = s->headFiles ; f != NULL ; f = f->next)
     {
      LOG("%s\t", f->file->name);
-     } 
+     }
      LOG("\n");
    }
 }
 
+void db_deleteTag(char* fileName, char* tagName)
+{
+  struct fileHash* fH;
+  struct tagHash* tH;
+
+  HASH_FIND_STR(fileTable, fileName, fH);
+  if(fH == NULL){
+    LOG("Delete Tag : file not found\n");
+  }
+  else{
+    HASH_FIND_STR(fH->headTags, tagName, tH);
+    if(tH == NULL){
+      LOG("Delete Tag : tag not found in file\n");
+    }
+    else{
+      HASH_DEL(fH->headTags,tH);
+      free(tH->name);
+      free(tH);
+    }
+  }
+
+  HASH_FIND_STR(tagTable, tagName, tH);
+  if(tH == NULL){
+    LOG("Delete Tag : tag not found\n");
+  }
+  else{
+    HASH_FIND_STR(tH->headFiles, fileName, fH);
+    if(fH == NULL){
+      LOG("Delete Tag : file not found in tag\n");
+    }
+    else{
+      HASH_DEL(tH->headFiles,fH);
+      free(fH->name);
+      free(fH);
+
+      if(HASH_COUNT(tH->headFiles) == 0){
+        HASH_DEL(tagTable, tH);
+        free(tH->name);
+        free(tH);
+      }
+    }
+  }
+}
+
+void db_deleteFile(char* fileName)
+{
+  struct fileHash* fH;
+  struct tagHash *current_tag,*tmp;
+
+
+  HASH_FIND_STR(fileTable, fileName, fH);
+  if(fH == NULL){
+    LOG("Delete File : file not found\n");
+  }
+  else{
+    HASH_ITER(hh,fH->headTags,current_tag,tmp){
+      HASH_DEL(fH->headTags,current_tag);
+      free(current_tag->name);
+      free(current_tag);
+    }
+    HASH_DEL(fileTable, fH);
+    free(fH->name);
+    free(fH);
+  }
+
+  HASH_ITER(hh, tagTable, current_tag, tmp){
+    HASH_FIND_STR(current_tag->headFiles, fileName, fH);
+    if(fH != NULL){
+      HASH_DEL(current_tag->headFiles, fH);
+      free(fH->name);
+      free(fH);
+
+      if(HASH_COUNT(current_tag->headFiles) == 0){
+        HASH_DEL(tagTable, current_tag);
+        free(current_tag->name);
+        free(current_tag);
+      }
+    }
+  }
+}
 
 void db_deleteTagTable()
 {

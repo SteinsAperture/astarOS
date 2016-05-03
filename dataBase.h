@@ -11,7 +11,7 @@
 
 struct tagHash{
   char * name;
-  struct fileNode* headFiles;
+  struct fileHash* headFiles;
   UT_hash_handle hh;         /* makes this structure hashable */
 };
 
