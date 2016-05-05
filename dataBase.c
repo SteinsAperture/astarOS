@@ -4,10 +4,68 @@
 FILE *mylog = NULL;
 #define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
 
-struct hashElt* tagTable = NULL;
+
 struct hashElt* fileTable = NULL;
+/*
+   hashTab (file) 
+        file -> name : nom du fichier
+	     -> nextLvl : hashTab (tag) = Liste de tags associés à un fichier.
+	     tag -> name : nom du tag
+	         -> nextLvl : NULL.
+*/
+struct hashElt* tagTable = NULL;
+/* 
+   hashTab (tag) 
+        tag -> name : nom du tag
+	    -> nextLvl : hashTab (file) = Liste de fichiers associés à un tag.
+	    file -> name : nom du fichier
+	         -> nextLvl : pointeur vers le vrai fichier dans fileTable.
+   Le pointeur évite de dupliquer les listes de tags d'un fichier.
+*/
 
 char* strdup(const char * s);
+
+
+struct hashElt * db_creatHashElt(char * name) {
+  struct hashElt * he = malloc(sizeof(struct hashElt));
+  he->name = strdup(name);
+  he->nextLvl = NULL;
+  return he;
+}
+
+struct hashElt * db_findHashElt(struct hashElt* hashTable, char * name) {
+  struct hashElt* elt = NULL;
+  HASH_FIND_STR(hashTable,name,elt);
+  return elt;
+}
+
+struct hashElt * db_addHashElt(struct hashElt** hashTable, char * name) {
+  return db_addFullHashElt(hashTable, name, NULL);
+}
+
+struct hashElt * db_addFullHashElt(struct hashElt** hashTable, char * name, struct hashElt* next) {
+  struct hashElt* elt = db_creatHashElt(name);
+  elt->nextLvl = next;
+  HASH_ADD_KEYPTR( hh, (*hashTable), elt->name, strlen(elt->name), elt);
+  return elt;
+}
+
+
+
+struct fileNode * db_creatFileNode(struct hashElt* elt) {
+  struct fileNode * n = malloc(sizeof(struct fileNode));
+  n->file = elt;
+  n->next = n->prev = NULL;
+  return n;
+}
+
+
+struct fileNode * db_addFileNode(struct fileNode** list, struct hashElt* elt) {
+  struct fileNode * n = db_creatFileNode(elt);
+  DL_APPEND((*list), n);
+  return n;
+}
+
 
 void db_debugFiles() {
   struct hashElt* it, *it2;
@@ -48,106 +106,53 @@ void db_debugTags() {
   LOG("\n");
 }
 
+
+struct hashElt * db_getFileTable() {
+  return fileTable;
+}
+
 void db_addTag(char* fileName, char* tagName)
 {
-  db_debugFiles();
-  db_debugTags();
-
   mylog = mylog ? mylog : fopen(LOGFILE, "a");
   LOG("FIND TAGNAME : %s\t FILENAME : %s \n",tagName, fileName );
 
-  // Recherche du tag
-  struct hashElt* th = NULL;
-  HASH_FIND_STR(tagTable, tagName, th);
-
-  // Tentative d'ajout du fichier
-  db_addFile(fileName);
-
-  // Recherche du fichier
-  struct hashElt* fh = NULL;
-  HASH_FIND_STR(fileTable, fileName, fh);
+  struct hashElt *th = db_findHashElt(tagTable, tagName); // Récupérer le tag s'il existe.
   
-  //Le tag n'existe pas ?
-  if( th == NULL ) {
-    LOG("CREATE TAG %s \n", tagName);
-    th = malloc(sizeof(struct hashElt));
-    th->name = strdup(tagName); // Mémoire non free
-    th->nextLvl = NULL;
+  if( th == NULL ) // Le tag n'existe pas, le créer.
+    th = db_addHashElt(&tagTable, tagName);
 
-    HASH_ADD_KEYPTR( hh, tagTable, th->name, strlen(th->name), th );
-  }
-
-  // Le tag existe, stocké dans th. Le fichier est stocké dans fh
+  struct hashElt *fh = db_findHashElt(fileTable, fileName); // Récupérer le fichier.
 
   // Ajouter le fichier dans la hashTable de fichiers du tag.
-  struct hashElt* tfh = malloc(sizeof(struct hashElt));
-  tfh->name = strdup(fileName);
-  tfh->nextLvl = fh; // Attention à ne pas free // Le fichier avec la hashtable de tag.
-  HASH_ADD_KEYPTR(hh, th->nextLvl , tfh->name, strlen(tfh->name), tfh);
+  struct hashElt* tfh = db_addFullHashElt(&(th->nextLvl), fileName, fh);
   
   // Ajouter le tag dans la hashTable de tags du fichier.
-  struct hashElt* fth = malloc(sizeof(struct hashElt));
-  fth->name = strdup(tagName);
-  fth->nextLvl = NULL;
-  HASH_ADD_KEYPTR( hh, fh->nextLvl, fth->name, strlen(fth->name), fth);
+  struct hashElt* fth = db_addHashElt(&(fh->nextLvl),tagName);
 }
 
 void db_addFile(char* fileName)
 {
-  // Recherche du fichier
-  struct hashElt* fh = NULL;
-  HASH_FIND_STR(fileTable, fileName, fh);
-
-  //Le fichier n'existe pas ? Alors l'ajouter.
-  if( fh == NULL ) {
-    LOG("CREATE FILE %s \n", fileName);
-    fh = malloc(sizeof(struct hashElt));
-    fh->name = strdup(fileName);
-    fh->nextLvl = NULL;
-
-    HASH_ADD_KEYPTR( hh, fileTable, fh->name, strlen(fh->name), fh );
-  }
+  if(db_findHashElt(fileTable, fileName) == NULL) // Créer le fichier s'il n'existe pas.
+    db_addHashElt(&fileTable,fileName);
 }
 
 int db_tagExist(char* tagName)
 {
-  struct hashElt* th = NULL;
-  HASH_FIND_STR(tagTable, tagName, th);
-  return th != NULL;
+  return db_findHashElt(tagTable, tagName) != NULL;
 }
 
 struct fileNode* db_getFileList(char* tagName)
-{
+{  
+  struct fileNode *head = NULL; // Liste de fichier à retourner.
 
-  LOG("DATABASE getFileList : %s \n", tagName);
-  struct hashElt* th = NULL; // Tag à trouver
-  HASH_FIND_STR(tagTable, tagName, th);
-
-  struct fileNode *head = NULL; // Liste de fichier.
-
-  if (th == NULL) { // Pas de tag trouvé
-    if (strlen(tagName) == 0) { // tag vide = Tous les fichiers
-      LOG("ALL FILE \n");
-      struct hashElt * fh;
-      for(fh = fileTable; fh != NULL ; fh = fh->hh.next) {
-	struct fileNode * fn = malloc(sizeof(struct fileNode));
-	fn->file = fh;
-	fn->next = fn->prev = NULL;
-	DL_APPEND(head, fn);
-      }
-    } else {
-      LOG("AUCUN \n");
-      return NULL;
-    }
+  if (strlen(tagName) == 0) { // tag vide = Tous les fichiers
+    for(struct hashElt * fh = fileTable; fh != NULL ; fh = fh->hh.next)
+      db_addFileNode(&head, fh);
   } else { // Les fichiers d'un tag
-    LOG("PAR TAG \n");
-    struct hashElt * it;
-    for(it = th->nextLvl ; it != NULL ; it = it->hh.next) {
-      struct fileNode * fn = malloc(sizeof(struct fileNode));
-      fn->file = it->nextLvl;
-      fn->next = fn->prev = NULL;
-      DL_APPEND(head, fn);
-    }
+    struct hashElt* th = db_findHashElt(tagTable, tagName);
+    if (th != NULL)
+      for(struct hashElt * it = th->nextLvl ; it != NULL ; it = it->hh.next)
+	db_addFileNode(&head, it->nextLvl);
   }
 
   return head;
@@ -155,17 +160,16 @@ struct fileNode* db_getFileList(char* tagName)
 
 int db_linkExist(char* fileName,char* tagName){
 
-  /*//LOG("DATABASE getTagHash : %s \n", fileName);
-  struct fileHash* fh = NULL;
+  /* //LOG("DATABASE getTagHash : %s \n", fileName);
+  struct hashElt* fh = NULL;
   HASH_FIND_STR(fileTable,fileName,fh);
 
-  if(fh == NULL){
-    return 0;
-  }else{
-    struct tagHash* th = NULL;
+  if(fh != NULL) {
+    struct hashElt* th = NULL;
     HASH_FIND_STR(fh->headTags,tagName,th);
     return th != NULL;
     }*/
+  return 0;
 }
 
 void db_deleteFileList(struct fileNode * fileList) {

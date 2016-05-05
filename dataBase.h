@@ -21,6 +21,21 @@ struct fileNode{
   struct fileNode *next, *prev;
 };
 
+/**
+   METHODES PRIVEES
+ */
+struct hashElt * db_creatHashElt(char * name);
+struct hashElt * db_findHashElt(struct hashElt* hashTable, char * name);
+struct hashElt * db_addHashElt(struct hashElt** hashTable, char * name);
+struct hashElt * db_addFullHashElt(struct hashElt** hashTable, char * name, struct hashElt* next);
+
+struct fileNode * db_creatFileNode(struct hashElt* elt);
+struct fileNode * db_addFileNode(struct fileNode** list, struct hashElt* elt);
+/**
+   METHODES PUBLIQUES
+ */
+
+struct hashElt * db_getFileTable();
 //add a tag in the hashtable
 void db_addTag(char* fileName, char* tagName);
 
