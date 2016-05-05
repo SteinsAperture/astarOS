@@ -50,18 +50,44 @@ struct hashElt * db_addFullHashElt(struct hashElt** hashTable, char * name, stru
   return elt;
 }
 
+void db_deleteHashElt(struct hashElt* elt) {
+  free(elt->name);
+  free(elt);
+}
+
+void db_deleteDoubleHashTable(struct hashElt** hashTable) {
+  struct hashElt *it1, *tmp1, *it2, *tmp2;
+
+  HASH_ITER(hh,(*hashTable),it1,tmp1){
+    HASH_ITER(hh,it1->nextLvl,it2,tmp2){
+      db_removeHashEltPtr(&(it1->nextLvl), it2);
+    }
+    db_removeHashEltPtr(hashTable, it1);
+  }
+}
+
+void db_removeHashElt(struct hashElt** hashTable, char * name) {
+  db_removeHashEltPtr(hashTable,db_findHashElt(*hashTable, name));
+}
+
+void db_removeHashEltPtr(struct hashElt** hashTable, struct hashElt * elt) {
+  if (elt != NULL) {
+    HASH_DEL(*hashTable,elt);
+    db_deleteHashElt(elt);
+  }
+}
 
 
-struct fileNode * db_creatFileNode(struct hashElt* elt) {
-  struct fileNode * n = malloc(sizeof(struct fileNode));
-  n->file = elt;
+struct eltNode * db_creatEltNode(struct hashElt* elt) {
+  struct eltNode * n = malloc(sizeof(struct eltNode));
+  n->elt = elt;
   n->next = n->prev = NULL;
   return n;
 }
 
 
-struct fileNode * db_addFileNode(struct fileNode** list, struct hashElt* elt) {
-  struct fileNode * n = db_creatFileNode(elt);
+struct eltNode * db_addEltNode(struct eltNode** list, struct hashElt* elt) {
+  struct eltNode * n = db_creatEltNode(elt);
   DL_APPEND((*list), n);
   return n;
 }
@@ -113,7 +139,6 @@ struct hashElt * db_getFileTable() {
 
 void db_addTag(char* fileName, char* tagName)
 {
-  mylog = mylog ? mylog : fopen(LOGFILE, "a");
   LOG("FIND TAGNAME : %s\t FILENAME : %s \n",tagName, fileName );
 
   struct hashElt *th = db_findHashElt(tagTable, tagName); // Récupérer le tag s'il existe.
@@ -141,18 +166,18 @@ int db_tagExist(char* tagName)
   return db_findHashElt(tagTable, tagName) != NULL;
 }
 
-struct fileNode* db_getFileList(char* tagName)
+struct eltNode* db_getFileList(char* tagName)
 {  
-  struct fileNode *head = NULL; // Liste de fichier à retourner.
+  struct eltNode *head = NULL; // Liste de fichier à retourner.
 
   if (strlen(tagName) == 0) { // tag vide = Tous les fichiers
     for(struct hashElt * fh = fileTable; fh != NULL ; fh = fh->hh.next)
-      db_addFileNode(&head, fh);
+      db_addEltNode(&head, fh);
   } else { // Les fichiers d'un tag
     struct hashElt* th = db_findHashElt(tagTable, tagName);
     if (th != NULL)
       for(struct hashElt * it = th->nextLvl ; it != NULL ; it = it->hh.next)
-	db_addFileNode(&head, it->nextLvl);
+	db_addEltNode(&head, it->nextLvl);
   }
 
   return head;
@@ -160,21 +185,17 @@ struct fileNode* db_getFileList(char* tagName)
 
 int db_linkExist(char* fileName,char* tagName){
 
-  /* //LOG("DATABASE getTagHash : %s \n", fileName);
-  struct hashElt* fh = NULL;
-  HASH_FIND_STR(fileTable,fileName,fh);
+  //LOG("DATABASE getTagHash : %s \n", fileName);
+  struct hashElt* fh = db_findHashElt(fileTable, fileName);
 
-  if(fh != NULL) {
-    struct hashElt* th = NULL;
-    HASH_FIND_STR(fh->headTags,tagName,th);
-    return th != NULL;
-    }*/
+  if(fh != NULL)
+    return db_findHashElt(fh->nextLvl, tagName) != NULL;
   return 0;
 }
 
-void db_deleteFileList(struct fileNode * fileList) {
+void db_deleteFileList(struct eltNode * fileList) {
   if (fileList != NULL) {
-    struct fileNode *elt, *it;
+    struct eltNode *elt, *it;
 
     DL_FOREACH_SAFE(fileList,elt,it) {
       DL_DELETE(fileList,elt);
@@ -183,123 +204,44 @@ void db_deleteFileList(struct fileNode * fileList) {
   }
 }
 
-struct hashElt* db_getAllFiles()
+void db_removeTag(char* fileName, char* tagName)
 {
-  return fileTable;
-}
+  struct hashElt *fh;
 
-void db_deleteTag(char* fileName, char* tagName)
-{
-  /* struct fileHash* fH;
-  struct tagHash* tH;
+  // Modifier la hashTable de tags du fichier. 
+  fh = db_findHashElt(fileTable, fileName); // Récupérer le fichier.
+  if (fh != NULL)
+    db_removeHashElt(&(fh->nextLvl), tagName); // Retirer le tag du fichier.
 
-  HASH_FIND_STR(fileTable, fileName, fH);
-  if(fH == NULL){
-    LOG("Delete Tag : file not found\n");
-  }
-  else{
-    HASH_FIND_STR(fH->headTags, tagName, tH);
-    if(tH == NULL){
-      LOG("Delete Tag : tag not found in file\n");
-    }
-    else{
-      HASH_DEL(fH->headTags,tH);
-      free(tH->name);
-      free(tH);
-    }
-  }
-
-  HASH_FIND_STR(tagTable, tagName, tH);
-  if(tH == NULL){
-    LOG("Delete Tag : tag not found\n");
-  }
-  else{
-    HASH_FIND_STR(tH->headFiles, fileName, fH);
-    if(fH == NULL){
-      LOG("Delete Tag : file not found in tag\n");
-    }
-    else{
-      HASH_DEL(tH->headFiles,fH);
-      free(fH->name);
-      free(fH);
-
-      if(HASH_COUNT(tH->headFiles) == 0){
-        HASH_DEL(tagTable, tH);
-        free(tH->name);
-        free(tH);
-      }
-    }
-    }*/
-}
-
-void db_deleteFile(char* fileName)
-{
-  /*struct fileHash* fH;
-  struct tagHash *tH,*tmp;
-
-
-  HASH_FIND_STR(fileTable, fileName, fH);
-  if(fH == NULL){
-    LOG("Delete File : file not found\n");
-  }
-  else{
-    HASH_ITER(hh,fH->headTags,tH,tmp){
-      HASH_DEL(fH->headTags,tH);
-      free(tH->name);
-      free(tH);
-    }
-    HASH_DEL(fileTable, fH);
-    free(fH->name);
-    free(fH);
-  }
-
-  HASH_ITER(hh, tagTable, tH, tmp){
-    HASH_FIND_STR(tH->headFiles, fileName, fH);
-    if(fH != NULL){
-      HASH_DEL(tH->headFiles, fH);
-      free(fH->name);
-      free(fH);
-
-      if(HASH_COUNT(tH->headFiles) == 0){
-        HASH_DEL(tagTable, tH);
-        free(tH->name);
-        free(tH);
-      }
-    }
-    }*/
-}
-
-void db_deleteTagTable()
-{
-  /*struct tagHash *current_tag,*tmp;
-  struct fileHash *current_file,*tmp2;
-
-  HASH_ITER(hh,tagTable,current_tag,tmp){
-    HASH_ITER(hh,current_tag->headFiles,current_file,tmp2){
-      HASH_DEL(current_tag->headFiles,current_file);
-      free(current_file->name);
-      free(current_file);
-    }
-    HASH_DEL(tagTable,current_tag);
-    free(current_tag->name);
-    free(current_tag);
-    }*/
-}
-
-void db_deleteFileTable(){
-  /* struct fileHash *current_file,*tmp;
-  struct tagHash *current_tag,*tmp2;
-
-  HASH_ITER(hh,fileTable,current_file,tmp){
+  struct hashElt *th;
+  // Modifier la hashTable de fichiers du tag.
+  th = db_findHashElt(tagTable, tagName); // Récupérer le tag.
+  if (th != NULL) {
+    db_removeHashElt(&(th->nextLvl), fileName); // Retirer le fichier du tag.
     
+    if(HASH_COUNT(th->nextLvl) == 0) // Retirer le tag de la BDD si vide.
+      db_removeHashEltPtr(&tagTable, th);
+  }
+}
 
-    HASH_ITER(hh,current_file->headTags,current_tag,tmp2){
-      HASH_DEL(current_file->headTags,current_tag);
-      free(current_tag->name);
-      free(current_tag);
+void db_removeFile(char* fileName)
+{
+  struct hashElt *fh, *th, *tmp;
+
+  fh = db_findHashElt(fileTable, fileName); // Récupérer le fichier.
+  if (fh != NULL) {
+    HASH_ITER(hh,fh->nextLvl,th,tmp){ // Retirer tous les tags contenus.
+      db_removeTag(fileName, th->name);
     }
-    HASH_DEL(fileTable,current_file);
-    free(current_file->name);
-    free(current_file);
-    }*/
+    db_removeHashEltPtr(&fileTable, fh);
+  }
+}
+
+void db_init() {
+   mylog = mylog ? mylog : fopen(LOGFILE, "a");
+}
+
+void db_destroy() {
+  db_deleteDoubleHashTable(&tagTable);
+  db_deleteDoubleHashTable(&fileTable);
 }

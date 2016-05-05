@@ -16,9 +16,9 @@ struct hashElt{
   UT_hash_handle hh;         /* makes this structure hashable */
 };
 
-struct fileNode{
-  struct hashElt* file;
-  struct fileNode *next, *prev;
+struct eltNode{
+  struct hashElt* elt;
+  struct eltNode *next, *prev;
 };
 
 /**
@@ -28,9 +28,13 @@ struct hashElt * db_creatHashElt(char * name);
 struct hashElt * db_findHashElt(struct hashElt* hashTable, char * name);
 struct hashElt * db_addHashElt(struct hashElt** hashTable, char * name);
 struct hashElt * db_addFullHashElt(struct hashElt** hashTable, char * name, struct hashElt* next);
+void db_deleteHashElt(struct hashElt* elt);
+void db_deleteDoubleHashTable(struct hashElt** hashTable);
+void db_removeHashElt(struct hashElt** hashTable, char * name);
+void db_removeHashEltPtr(struct hashElt** hashTable, struct hashElt * elt);
 
-struct fileNode * db_creatFileNode(struct hashElt* elt);
-struct fileNode * db_addFileNode(struct fileNode** list, struct hashElt* elt);
+struct eltNode * db_creatEltNode(struct hashElt* elt);
+struct eltNode * db_addEltNode(struct eltNode** list, struct hashElt* elt);
 /**
    METHODES PUBLIQUES
  */
@@ -40,21 +44,20 @@ struct hashElt * db_getFileTable();
 void db_addTag(char* fileName, char* tagName);
 
 //return files by tag
-struct fileNode* db_getFileList(char* tagName);
+struct eltNode* db_getFileList(char* tagName);
 
 int db_linkExist(char* fileName,char* tagName);
 
-void db_deleteFileList(struct fileNode * fileList);
+void db_deleteFileList(struct eltNode * fileList);
 
 void db_addFile(char* fileName);
 int db_tagExist(char* tagName);
 
-void db_deleteTag(char* fileName, char* tagName);
-void db_deleteFile(char* fileName);
+void db_removeTag(char* fileName, char* tagName);
+void db_removeFile(char* fileName);
 
-
-void db_deleteTagTable();
-void db_deleteFileTable();
+void db_init();
+void db_destroy();
 
 
 #endif

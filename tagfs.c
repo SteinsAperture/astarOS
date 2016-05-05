@@ -131,7 +131,7 @@ static int tag_opendir(const char* path, struct fuse_file_info* fi)
   struct request * req = tag_requestBegin(path,0);
   
   
-  struct fileNode * files = NULL;
+  struct eltNode * files = NULL;
   files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
 
   if (files != NULL) {
@@ -139,13 +139,13 @@ static int tag_opendir(const char* path, struct fuse_file_info* fi)
     if (req->headTags != NULL) {
       // Pour chaque tags qui suivent.
       for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
-	struct fileNode *elt, *it;
+	struct eltNode *elt, *it;
 	struct hashElt *th;
       
 	DL_FOREACH_SAFE(files,elt,it) {
 	  th = NULL;
 	  // Recherche du tag
-	  HASH_FIND_STR(elt->file->nextLvl, tn->name, th);
+	  HASH_FIND_STR(elt->elt->nextLvl, tn->name, th);
 	  if (th == NULL) {
 	    DL_DELETE(files,elt);
 	    free(elt);
@@ -154,13 +154,13 @@ static int tag_opendir(const char* path, struct fuse_file_info* fi)
       }
     }
 
-    struct fileNode *elt, *it;
+    struct eltNode *elt, *it;
       
     DL_FOREACH_SAFE(files,elt,it) {
-      LOG("file : %s \t",elt->file->name);
+      LOG("file : %s \t",elt->elt->name);
     }
     
-    struct fileNode *eltForCount;
+    struct eltNode *eltForCount;
     int count = 0;
     DL_COUNT(files,eltForCount,count);
 
@@ -192,7 +192,7 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
   
   LOG("readdir '%s'\n", path);
   
-  struct fileNode * files = NULL;
+  struct eltNode * files = NULL;
   files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
 
   if (files != NULL) {
@@ -200,13 +200,13 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
     if (req->headTags != NULL) {
       // Pour chaque tags qui suivent.
       for (struct tagNode *tn = req->headTags->next; tn != NULL; tn = tn->next){
-	struct fileNode *elt, *it;
+	struct eltNode *elt, *it;
 	struct hashElt *th;
       
 	DL_FOREACH_SAFE(files,elt,it) {
 	  th = NULL;
 	  // Recherche du tag
-	  HASH_FIND_STR(elt->file->nextLvl, tn->name, th);
+	  HASH_FIND_STR(elt->elt->nextLvl, tn->name, th);
 	  if (th == NULL) {
 	    DL_DELETE(files,elt);
 	    free(elt);
@@ -217,9 +217,9 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
 
     struct tagHash *availableTags = NULL, *it = NULL, *at = NULL;
     
-    for(struct fileNode * file = files; file != NULL ; file = file->next) {
+    for(struct eltNode * file = files; file != NULL ; file = file->next) {
       struct hashElt *th;
-      for(th = file->file->nextLvl ; th != NULL ; th = th->hh.next){
+      for(th = file->elt->nextLvl ; th != NULL ; th = th->hh.next){
 	at = NULL;
 	HASH_FIND_STR(availableTags, th->name, at);
 	if (at == NULL) {
@@ -229,8 +229,8 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
 	  HASH_ADD_KEYPTR( hh, availableTags, at->name, strlen(at->name), at );
 	}
       } 
-      //res = tag_getattr(file->file->name, &stbuf);
-      filler(buf, file->file->name, NULL, 0);  
+      //res = tag_getattr(file->elt->name, &stbuf);
+      filler(buf, file->elt->name, NULL, 0);  
     }
 
     LOG("READDIR fichiers OK");
@@ -372,12 +372,12 @@ static int tag_unlink(const char* path){
 
   DL_FOREACH(req->headTags,elt) {
     removeFile = 0;
-    //db_removeTag(req->file,elt->name);
+    db_removeTag(req->file,elt->name);
     LOG("TAG REMOVE %s FROM %s \n",elt->name,req->file);
   }
 
   if (removeFile) {
-    //db_removeFile(req->file);
+    db_removeFile(req->file);
     LOG("FILE REMOVE %s \n",req->file);
   }
 
@@ -392,7 +392,7 @@ static int tag_rename(const char* from, const char* to){
   struct request * req1 = tag_requestBegin(to,1),
     *req2 = tag_requestBegin(from,1);
 
-  if (strcmp(req1->file,req2->file) == 0) {
+  if (strcmp(req1->file,req2->file) == 0 && req2->headTags != NULL) {
     res = tag_unlink(from);
     if (res != -ENOENT)
       res = tag_link(req2->file,to);
@@ -464,6 +464,7 @@ int main(int argc, char *argv[])
 
   LOG("starting tagfs in %s\n", dirpath);
 
+  db_init();
   
   while ((dirent = readdir(dir)) != NULL) {
     if (dirent->d_name[0] != '.') {
@@ -479,6 +480,8 @@ int main(int argc, char *argv[])
   err = fuse_main(argc, argv, &tag_oper, NULL);
   LOG("stopped tagfs with return code %d\n", err);
 
+  df_save(dirpath);
+  db_destroy();
   closedir(dir);
   free(dirpath);
 

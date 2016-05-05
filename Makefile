@@ -14,13 +14,18 @@ tagfs: tagfs.c dataFile.o dataBase.o
 clean:
 	$(RM) $(PROGRAMS) *.log *.o
 
-.PHONY:	 mount, unmount, kill, test
+.PHONY:	 mount, unmount, kill, test, restore
 
-mount: 
+mount:
+	cp -f ./tests_de_base/tests/images/.tags ./tests_de_base/tests/images/.oldtags
 	mkdir -p mnt && ./$(PROGRAMS) ./tests_de_base/tests/images ./mnt
 
 unmount:
 	fusermount -u ./mnt
+
+restore:
+	rm ./tests_de_base/tests/images/.tags
+	mv ./tests_de_base/tests/images/.oldtags ./tests_de_base/tests/images/.tags
 
 kill:
 	kill -9 tagfs

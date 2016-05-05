@@ -42,8 +42,6 @@ if (dataFile == NULL) {
 }
 
 int df_save(char *path){
-  
-  mylog = fopen(LOGFILE, "a"); // append logs to previous executions
 
   LOG("dirpath : %s \n", path);
   char file[MAX];
@@ -59,8 +57,12 @@ int df_save(char *path){
     exit(EXIT_FAILURE);
   }else{
     struct hashElt *fh, *th;
+    int write = 0;
     for(fh = db_getFileTable(); fh != NULL ; fh = fh->hh.next) {
       if(HASH_COUNT(fh->nextLvl)>0){
+	if (write == 1)
+	  fprintf(dataFile, "\n");
+	write = 1;
         fprintf(dataFile, "[%s]\n",fh->name);
         for(th = fh->nextLvl; th != NULL ; th = th->hh.next) {
           fprintf(dataFile, "%s\n", th->name);
