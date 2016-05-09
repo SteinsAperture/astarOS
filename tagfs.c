@@ -6,10 +6,13 @@
 #define FUSE_USE_VERSION 26
 
 #include "tagfs.h"
+#include <pthread.h>
 
 static DIR *dir;
 static char *dirpath;
 static char fakeFile[255] = {'\0'};
+pthread_rwlock_t rwlock;
+
 
 /*******************
  * Logs
@@ -109,21 +112,23 @@ static int tag_getattr(const char *path, struct stat *stbuf)
   char * endPath = strrchr(req->realpath,'/');
   ++endPath; // Fichier ou tag
 
+  
+  
   if (res != -1) {
     struct tagNode *elt; 
-
+    pthread_rwlock_rdlock(&rwlock);
     DL_FOREACH(req->headTags,elt) {
       if (!db_linkExist(file, elt->name)) {
 	res = -ENOENT;
 	break;
       }
     }
+    pthread_rwlock_unlock(&rwlock);
   }
   
   if ((res == -ENOENT || res == -1) && endPath[0] != '\0' && strchr(endPath,'.') == NULL) { // Tag
     // C'est un répertoire virtuel, stat le répertoire racine.
     res = stat(dirpath, stbuf);
-    res = db_tagExist(endPath) ? 0 : 0;
   }
 
   if (res == -1)
@@ -142,7 +147,8 @@ static int tag_opendir(const char* path, struct fuse_file_info* fi)
   LOG("OPENDIR %s\n", path);
   struct request * req = tag_requestBegin(path,0);
   
-  
+  pthread_rwlock_rdlock(&rwlock);
+    
   struct eltNode * files = NULL;
   files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
 
@@ -172,11 +178,14 @@ static int tag_opendir(const char* path, struct fuse_file_info* fi)
       LOG("file : %s \t",elt->elt->name);
     }
     
-    struct eltNode *eltForCount;
+    /*struct eltNode *eltForCount;
     int count = 0;
-    DL_COUNT(files,eltForCount,count);
+    DL_COUNT(files,eltForCount,count);*/
 
-    if (count == 0)
+    pthread_rwlock_unlock(&rwlock);
+    
+    //if (count == 0)
+    if (files == NULL)
       res = -ENOENT;
 
     LOG("OPENDIR nettoyage\n");
@@ -205,6 +214,8 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
   LOG("readdir '%s'\n", path);
   filler (buf, ".", NULL, 0);
   filler (buf, "..", NULL, 0);
+
+  pthread_rwlock_rdlock(&rwlock);
   
   struct eltNode * files = NULL;
   files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
@@ -291,6 +302,8 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
     res = -ENOENT;
     LOG("readdir returning %s\n", strerror(-res));
   }
+  pthread_rwlock_unlock(&rwlock);
+  
   tag_requestEnd(req);
   return res;
 }
@@ -305,6 +318,8 @@ void tag_readTags (const char *file) {
   if (tmpTagFile == NULL) {
     perror("Fichier introuvable");
   }else{
+    pthread_rwlock_rdlock(&rwlock);
+    
     struct hashElt * hashTags = db_getTags(file);
     if (hashTags != NULL) {
       for(struct hashElt * it = hashTags; it != NULL; it = it->hh.next) {
@@ -312,6 +327,7 @@ void tag_readTags (const char *file) {
       }
     }
     fprintf(tmpTagFile, "\n");
+    pthread_rwlock_unlock(&rwlock);
   }
   fclose(tmpTagFile);
 }
@@ -395,11 +411,15 @@ static int tag_link(const char* from, const char* to){
   if (strcmp(req1->file,req2->file) == 0) {
     struct tagNode *elt; 
 
+    pthread_rwlock_wrlock(&rwlock);   
+    
     DL_FOREACH(req1->headTags,elt) {
       if (!db_linkExist(req1->file, elt->name)) {
 	db_addTag(req1->file, elt->name);
       }
     }
+
+    pthread_rwlock_unlock(&rwlock);
   } else {
     res = -ENOENT;
   }
@@ -417,6 +437,8 @@ static int tag_unlink(const char* path){
   struct tagNode *elt;
   int removeFile = 1;
 
+  pthread_rwlock_wrlock(&rwlock);
+    
   DL_FOREACH(req->headTags,elt) {
     removeFile = 0;
     db_removeTag(req->file,elt->name);
@@ -425,9 +447,12 @@ static int tag_unlink(const char* path){
 
   if (removeFile) {
     db_removeFile(req->file);
+    unlink(req->realpath);
     LOG("FILE REMOVE %s \n",req->file);
   }
 
+  pthread_rwlock_unlock(&rwlock);
+  
   tag_requestEnd(req);
   return 0;
 }
@@ -510,9 +535,18 @@ int main(int argc, char *argv[])
   argv++;
   argc--;
 
+
+  if (pthread_rwlock_init(&rwlock, NULL) < 0) {
+    perror("pthread_rwlock_init");
+    return -1;
+  }
+  
   err = fuse_main(argc, argv, &tag_oper, NULL);
   LOG("stopped tagfs with return code %d\n", err);
 
+  pthread_rwlock_destroy(&rwlock);
+
+  
   df_save(dirpath);
   db_destroy();
   closedir(dir);

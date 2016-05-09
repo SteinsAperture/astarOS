@@ -18,7 +18,7 @@ IMAGES=$(ls $PWD/images)
 TAGS=$(grep -v "\[" $PWD/images/.tags | grep -v "^$"|grep -v "#"|sort|uniq)
 TAGS_IMAGES=$(echo $TAGS $IMAGES | tr ' ' '\012'| sort)
 
-echo "verification"
+echo "verification ls"
 if test "$TOUS" == "$TAGS_IMAGES"
 then
     echo "Test1 ... Pass"
