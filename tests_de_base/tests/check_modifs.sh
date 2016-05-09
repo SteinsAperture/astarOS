@@ -29,11 +29,13 @@ mechant
 gentil
 
 [ipb.jpeg]
-ecole
+ecoleSup
 
 [marmotte.jpeg]
 animal
 gentil
+doux
+calme
 
 [rabbit.jpeg]
 animal
@@ -42,7 +44,7 @@ monty
 EOF
 ) > check_$$
 
-diff $PWD/images/.tags.new check_$$ > diff_$$
+diff $PWD/images/.tags check_$$ > diff_$$
 if test -s diff_$$
 then
     echo "Test ... Failure"
