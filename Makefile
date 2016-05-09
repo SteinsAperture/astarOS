@@ -1,15 +1,16 @@
 CPPFLAGS=-D_FILE_OFFSET_BITS=64 -std=c99
 CFLAGS=-Wno-unused-label -Wno-unused-function
+DEFINE=''
 
 PROGRAMS = tagfs
 
 all: $(PROGRAMS)
 
 tagfs: tagfs.c dataFile.o dataBase.o
-	gcc $(CPPFLAGS) $(CFLAGS) -Wall $^ -o $@ -lfuse
+	gcc $(CPPFLAGS) $(CFLAGS) $(DEFINE) -Wall $^ -o $@ -lfuse
 
-%: %.o
-	gcc $(CPPFLAGS) $(CFLAGS) -Wall -o $@ $^
+%.o: %.c
+	gcc $(CPPFLAGS) $(CFLAGS) $(DEFINE) -Wall -c -o $@ $^
 
 clean:
 	$(RM) $(PROGRAMS) *.log *.o
@@ -33,3 +34,4 @@ kill:
 test: $(PROGRAMS)
 	cp ./$(PROGRAMS) ./tests_de_base/tests/$(PROGRAMS)
 	cd ./tests_de_base/tests/ && ./check_ls.sh
+

@@ -6,6 +6,7 @@
 #include <string.h>
 #include "dataBase.h"
 
+extern FILE *mylog;
 
 int df_load(char *path);
 

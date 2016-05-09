@@ -2,8 +2,13 @@
 #define MAX 128
 
 #define LOGFILE "tagfs.log"
-FILE *mylog;
-#define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
+#ifdef WRITELOG
+#define LOG(args...) do { if (mylog == NULL) mylog = fopen(LOGFILE, "a"); \
+    fprintf(mylog, args); fflush(mylog);			  \
+  } while (0)
+#else
+#define LOG(args...) do { } while (0)
+#endif
 
 int df_load(char *path){
 
@@ -38,6 +43,7 @@ if (dataFile == NULL) {
       // Reste on ignore
     }
   }
+ fclose(dataFile);
   return 0;
 }
 
@@ -49,8 +55,6 @@ int df_save(char *path){
   strcat(file, "/.tags");
   LOG("fileazr : %s \n", file);
   FILE* dataFile;
-  char line[MAX], f[MAX], t[MAX];
-  f[0]=0;
   dataFile =  fopen(file, "w");
   if (dataFile == NULL) {
     perror("Fichier introuvable");
@@ -71,5 +75,6 @@ int df_save(char *path){
       }
     }
   }
+  fclose(dataFile);
   return 0;
 }

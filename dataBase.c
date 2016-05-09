@@ -1,8 +1,13 @@
 #include "dataBase.h"
 #define LOGFILE "tagfs.log"
 
-FILE *mylog = NULL;
-#define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
+#ifdef WRITELOG
+#define LOG(args...) do { if (mylog == NULL) mylog = fopen(LOGFILE, "a"); \
+    fprintf(mylog, args); fflush(mylog);			  \
+  } while (0)
+#else
+#define LOG(args...) do { } while (0)
+#endif
 
 
 struct hashElt* fileTable = NULL;
@@ -26,24 +31,24 @@ struct hashElt* tagTable = NULL;
 char* strdup(const char * s);
 
 
-struct hashElt * db_creatHashElt(char * name) {
+struct hashElt * db_creatHashElt(const char * name) {
   struct hashElt * he = malloc(sizeof(struct hashElt));
   he->name = strdup(name);
   he->nextLvl = NULL;
   return he;
 }
 
-struct hashElt * db_findHashElt(struct hashElt* hashTable, char * name) {
+struct hashElt * db_findHashElt(struct hashElt* hashTable, const char * name) {
   struct hashElt* elt = NULL;
   HASH_FIND_STR(hashTable,name,elt);
   return elt;
 }
 
-struct hashElt * db_addHashElt(struct hashElt** hashTable, char * name) {
+struct hashElt * db_addHashElt(struct hashElt** hashTable, const char * name) {
   return db_addFullHashElt(hashTable, name, NULL);
 }
 
-struct hashElt * db_addFullHashElt(struct hashElt** hashTable, char * name, struct hashElt* next) {
+struct hashElt * db_addFullHashElt(struct hashElt** hashTable, const char * name, struct hashElt* next) {
   struct hashElt* elt = db_creatHashElt(name);
   elt->nextLvl = next;
   HASH_ADD_KEYPTR( hh, (*hashTable), elt->name, strlen(elt->name), elt);
@@ -66,7 +71,7 @@ void db_deleteDoubleHashTable(struct hashElt** hashTable) {
   }
 }
 
-void db_removeHashElt(struct hashElt** hashTable, char * name) {
+void db_removeHashElt(struct hashElt** hashTable, const char * name) {
   db_removeHashEltPtr(hashTable,db_findHashElt(*hashTable, name));
 }
 
@@ -149,10 +154,10 @@ void db_addTag(char* fileName, char* tagName)
   struct hashElt *fh = db_findHashElt(fileTable, fileName); // Récupérer le fichier.
 
   // Ajouter le fichier dans la hashTable de fichiers du tag.
-  struct hashElt* tfh = db_addFullHashElt(&(th->nextLvl), fileName, fh);
+  db_addFullHashElt(&(th->nextLvl), fileName, fh);
   
   // Ajouter le tag dans la hashTable de tags du fichier.
-  struct hashElt* fth = db_addHashElt(&(fh->nextLvl),tagName);
+  db_addHashElt(&(fh->nextLvl),tagName);
 }
 
 void db_addFile(char* fileName)
@@ -204,6 +209,13 @@ void db_deleteFileList(struct eltNode * fileList) {
   }
 }
 
+struct hashElt * db_getTags(const char* fileName)
+{
+  struct hashElt * elt = db_findHashElt(fileTable, fileName);
+  return elt != NULL ? elt->nextLvl : NULL;
+}
+
+
 void db_removeTag(char* fileName, char* tagName)
 {
   struct hashElt *fh;
@@ -235,10 +247,6 @@ void db_removeFile(char* fileName)
     }
     db_removeHashEltPtr(&fileTable, fh);
   }
-}
-
-void db_init() {
-   mylog = mylog ? mylog : fopen(LOGFILE, "a");
 }
 
 void db_destroy() {

@@ -9,15 +9,21 @@
 
 static DIR *dir;
 static char *dirpath;
+static char fakeFile[255] = {'\0'};
 
 /*******************
  * Logs
  */
 
 #define LOGFILE "tagfs.log"
-FILE *mylog;
-#define LOG(args...) do { fprintf(mylog, args); fflush(mylog); } while (0)
-
+FILE *mylog = NULL;
+#ifdef WRITELOG
+#define LOG(args...) do { if (mylog == NULL) mylog = fopen(LOGFILE, "a"); \
+    fprintf(mylog, args); fflush(mylog);			  \
+  } while (0)
+#else
+#define LOG(args...) do { } while (0)
+#endif
 /*************************
  * TODO
  */
@@ -41,13 +47,13 @@ struct request * tag_requestBegin(const char * path, int mode) // 0->dir, 1->fil
       beginFile = p;
     }
     req->file = strdup(beginFile);
-    LOG("REQUEST realpath : %s \n", req->realpath);
-    LOG("REQUEST file : %s \n", req->file);
+    //LOG("REQUEST realpath : %s \n", req->realpath);
+    //LOG("REQUEST file : %s \n", req->file);
   }
   
   char * token = strtok(p,"/");
   while (token != NULL) {
-    LOG("REQUEST tagDIR : %s \n",token);
+    //LOG("REQUEST tagDIR : %s \n",token);
 
     struct tagNode * tn = malloc(sizeof(struct tagNode));
     tn->name = strdup(token);
@@ -60,7 +66,7 @@ struct request * tag_requestBegin(const char * path, int mode) // 0->dir, 1->fil
 
   free(p);
 
-  LOG("REQUEST BUILD \n");
+  //LOG("REQUEST BUILD \n");
   return req;
 }
 
@@ -90,9 +96,15 @@ void tag_requestEnd(struct request * req)
 static int tag_getattr(const char *path, struct stat *stbuf)
 {
   struct request * req = tag_requestBegin(path,1);
+  char * file = req->file;
   
   int res;
-  res = stat(req->realpath, stbuf);
+  if (file != NULL && file[0] == '.') {
+    res = stat(fakeFile, stbuf);
+    file++; // enlever le .
+  }
+  else
+    res = stat(req->realpath, stbuf);
   
   char * endPath = strrchr(req->realpath,'/');
   ++endPath; // Fichier ou tag
@@ -101,7 +113,7 @@ static int tag_getattr(const char *path, struct stat *stbuf)
     struct tagNode *elt; 
 
     DL_FOREACH(req->headTags,elt) {
-      if (!db_linkExist(req->file, elt->name)) {
+      if (!db_linkExist(file, elt->name)) {
 	res = -ENOENT;
 	break;
       }
@@ -109,7 +121,7 @@ static int tag_getattr(const char *path, struct stat *stbuf)
   }
   
   if ((res == -ENOENT || res == -1) && endPath[0] != '\0' && strchr(endPath,'.') == NULL) { // Tag
-     // C'est un répertoire virtuel, stat le répertoire racine.
+    // C'est un répertoire virtuel, stat le répertoire racine.
     res = stat(dirpath, stbuf);
     res = db_tagExist(endPath) ? 0 : 0;
   }
@@ -191,6 +203,8 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
   struct request * req = tag_requestBegin(path,0);
   
   LOG("readdir '%s'\n", path);
+  filler (buf, ".", NULL, 0);
+  filler (buf, "..", NULL, 0);
   
   struct eltNode * files = NULL;
   files = db_getFileList(req->headTags != NULL ? req->headTags->name : "");
@@ -230,7 +244,12 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
 	}
       } 
       //res = tag_getattr(file->elt->name, &stbuf);
-      filler(buf, file->elt->name, NULL, 0);  
+      filler(buf, file->elt->name, NULL, 0);
+
+      char secretTagFile[255] = {'\0'};
+      strcat(secretTagFile, ".");
+      strcat(secretTagFile, file->elt->name);
+      filler(buf, secretTagFile, NULL, 0);
     }
 
     LOG("READDIR fichiers OK");
@@ -276,16 +295,44 @@ static int tag_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
   return res;
 }
 
+void tag_readTags (const char *file) {
+  file++; // Enlever le .
+  LOG("READTAF %s \n",file);
+
+
+  FILE* tmpTagFile;
+  tmpTagFile = fopen(fakeFile, "w");
+  if (tmpTagFile == NULL) {
+    perror("Fichier introuvable");
+  }else{
+    struct hashElt * hashTags = db_getTags(file);
+    if (hashTags != NULL) {
+      for(struct hashElt * it = hashTags; it != NULL; it = it->hh.next) {
+	fprintf(tmpTagFile, "%s ",it->name);
+      }
+    }
+    fprintf(tmpTagFile, "\n");
+  }
+  fclose(tmpTagFile);
+}
+
+
 /* read the grepped contents of the file */
 int tag_read (const char *path, char *buffer, size_t len, off_t off, struct fuse_file_info *fi)
 {
   struct request * req = tag_requestBegin(path,1);
+
+  int res = 0;
+  
   char *realpath = req->realpath;
+  if (req->file[0] == '.') {
+    tag_readTags(req->file);
+    realpath = fakeFile;
+  }
   char *command;
   FILE *fd;
   char *cmdoutput;
-  int res;
-
+   
   LOG("read '%s' for %ld bytes starting at offset %ld\n", path, len, off);
 
   asprintf(&command, "cat %s", realpath);
@@ -303,37 +350,37 @@ int tag_read (const char *path, char *buffer, size_t len, off_t off, struct fuse
   fd = popen(command, "r");
   if (!fd) {
     res = -errno;
-    goto out;
-  }
-  
-  /* read up to len+off bytes from the command output */
-  cmdoutput = malloc(len+off);
-  if (!cmdoutput) {
-    res = -ENOMEM;
-    goto out_with_fd;
-  }
-  res = fread(cmdoutput, 1, len+off, fd);
-  LOG("read got %d bytes out of %ld requested\n", res, len+off);
-  if (res > off) {
-    /* we read more than off, ignore the off first bytes and copy the remaining ones */
-    memcpy(buffer, cmdoutput+off, res-off);
-    res -= off;
   } else {
-    /* we failed to read enough */
-    res = 0;
+  
+    /* read up to len+off bytes from the command output */
+    cmdoutput = malloc(len+off);
+    if (!cmdoutput) {
+      res = -ENOMEM;
+	
+      pclose(fd);
+    
+    } else {
+      res = fread(cmdoutput, 1, len+off, fd);
+      LOG("read got %d bytes out of %ld requested\n", res, len+off);
+      if (res > off) {
+	/* we read more than off, ignore the off first bytes and copy the remaining ones */
+	memcpy(buffer, cmdoutput+off, res-off);
+	res -= off;
+      } else {
+	/* we failed to read enough */
+	res = 0;
+      }
+
+      free(cmdoutput);
+    }
   }
+  free(command); 
 
-  free(cmdoutput);
-  free(command);
-
- out_with_fd:
-  pclose(fd);
- out:
+  LOG("content buf: %s", buffer);
   if (res < 0)
     LOG("read returning %s\n", strerror(-res));
   else
     LOG("read returning success (read %d)\n", res);
-
   tag_requestEnd(req);
   return res;
 }
@@ -404,34 +451,14 @@ static int tag_rename(const char* from, const char* to){
   return res;
 }
 
-
-static int tag_readlink(const char* path, char* buf, size_t size){
-  LOG("READLINK %s - %s - %lu \n", path, buf, size);
-  return 0;
-}
-
-static int tag_symlink(const char* to, const char* from){
-  LOG("SYMLINK %s from %s \n", to, from);
-  return 0;
-}
-/*
-static int tag_access(const char* path, int mask){
-
-  LOG("ACCESS %s \n",path);
-  return 0;
-}
-*/
 static struct fuse_operations tag_oper = {
   .getattr = tag_getattr,
   .readdir = tag_readdir,
   .read = tag_read,
   .link = tag_link,
-  .readlink = tag_readlink,
-  .symlink = tag_symlink,
   .opendir = tag_opendir,
   .unlink = tag_unlink,
   .rename = tag_rename,
-  //.access = tag_access,
 };
 
 /**************************
@@ -459,12 +486,18 @@ int main(int argc, char *argv[])
   struct dirent *dirent;
   rewinddir(dir);
 
-  mylog = fopen(LOGFILE, "a"); /* append logs to previous executions */
   LOG("\n");
 
   LOG("starting tagfs in %s\n", dirpath);
 
-  db_init();
+  strcat(fakeFile,dirpath);
+  strcat(fakeFile,"/.fakefile");
+  mode_t mode; 
+  dev_t dev;
+  
+  mode = S_IFREG | 0660;
+  dev = 0;
+  mknod(fakeFile, mode, dev);
   
   while ((dirent = readdir(dir)) != NULL) {
     if (dirent->d_name[0] != '.') {

@@ -9,6 +9,7 @@
 
 #define TAGNAME_SIZE 128
 
+extern FILE* mylog;
 
 struct hashElt{
   char * name;
@@ -24,13 +25,13 @@ struct eltNode{
 /**
    METHODES PRIVEES
  */
-struct hashElt * db_creatHashElt(char * name);
-struct hashElt * db_findHashElt(struct hashElt* hashTable, char * name);
-struct hashElt * db_addHashElt(struct hashElt** hashTable, char * name);
-struct hashElt * db_addFullHashElt(struct hashElt** hashTable, char * name, struct hashElt* next);
+struct hashElt * db_creatHashElt(const char * name);
+struct hashElt * db_findHashElt(struct hashElt* hashTable, const char * name);
+struct hashElt * db_addHashElt(struct hashElt** hashTable, const char * name);
+struct hashElt * db_addFullHashElt(struct hashElt** hashTable, const char * name, struct hashElt* next);
 void db_deleteHashElt(struct hashElt* elt);
 void db_deleteDoubleHashTable(struct hashElt** hashTable);
-void db_removeHashElt(struct hashElt** hashTable, char * name);
+void db_removeHashElt(struct hashElt** hashTable, const char * name);
 void db_removeHashEltPtr(struct hashElt** hashTable, struct hashElt * elt);
 
 struct eltNode * db_creatEltNode(struct hashElt* elt);
@@ -53,10 +54,10 @@ void db_deleteFileList(struct eltNode * fileList);
 void db_addFile(char* fileName);
 int db_tagExist(char* tagName);
 
+struct hashElt * db_getTags(const char* fileName);
 void db_removeTag(char* fileName, char* tagName);
 void db_removeFile(char* fileName);
 
-void db_init();
 void db_destroy();
 
 
